@@ -19,6 +19,8 @@ test("cli parser reads flags and task text", () => {
     "ollama",
     "--agent",
     "debugger",
+    "--session",
+    "long-build",
     "--allow-shell",
     "--telegram-allowed-chat",
     "123,456",
@@ -33,6 +35,7 @@ test("cli parser reads flags and task text", () => {
   ]);
   assert.equal(args.provider, "ollama");
   assert.equal(args.agent, "debugger");
+  assert.equal(args.session, "long-build");
   assert.equal(args.allowShell, true);
   assert.deepEqual(args.telegramAllowedChat, ["123", "456"]);
   assert.equal(args.googleClientIdEnv, "GOOGLE_CLIENT");
@@ -56,6 +59,8 @@ test("setup writes config and starter skill", async () => {
   await runSetup(config, path.join(root, "config.json"), () => answers.shift() ?? "", (line) => lines.push(line));
   assert.equal(fs.existsSync(path.join(root, "config.json")), true);
   assert.equal(fs.existsSync(path.join(root, "config", "agents")), true);
+  assert.equal(fs.existsSync(path.join(root, "config", "teams")), true);
+  assert.equal(fs.existsSync(path.join(root, "config", "sessions")), true);
   assert.equal(fs.existsSync(path.join(root, "config", "memory.jsonl")), true);
   assert.equal(fs.existsSync(path.join(root, "config", "skills", "starter.md")), true);
   assert.match(lines.join("\n"), /Wrote config/);
@@ -67,6 +72,8 @@ test("setup with custom config keeps files nearby", async () => {
   const answers = ["", "", "", "", "", ""];
   await runSetup(config, path.join(root, "custom", "butterclaw.json"), () => answers.shift() ?? "", () => undefined);
   assert.equal(fs.existsSync(path.join(root, "custom", "agents")), true);
+  assert.equal(fs.existsSync(path.join(root, "custom", "teams")), true);
+  assert.equal(fs.existsSync(path.join(root, "custom", "sessions")), true);
   assert.equal(fs.existsSync(path.join(root, "custom", "skills", "starter.md")), true);
   assert.equal(fs.existsSync(path.join(root, "custom", "memory.jsonl")), true);
 });
@@ -76,6 +83,8 @@ test("missing custom config defaults nearby", () => {
   const config = loadConfig(path.join(root, "custom", "butterclaw.json"));
   assert.equal(config.configDir, path.join(root, "custom"));
   assert.equal(config.agentsDir, path.join(root, "custom", "agents"));
+  assert.equal(config.teamsDir, path.join(root, "custom", "teams"));
+  assert.equal(config.sessionsDir, path.join(root, "custom", "sessions"));
   assert.equal(config.skillsDir, path.join(root, "custom", "skills"));
 });
 

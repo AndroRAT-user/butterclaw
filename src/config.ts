@@ -32,6 +32,8 @@ export interface ButterclawConfig {
   googleCalendarId: string;
   googleOAuthPath: string;
   agentsDir: string;
+  teamsDir: string;
+  sessionsDir: string;
   skillsDir: string;
   memoryPath: string;
   telegramStatePath: string;
@@ -77,6 +79,8 @@ export function defaultConfig(overrides: Partial<ButterclawConfig> = {}): Butter
     googleCalendarId: "primary",
     googleOAuthPath: path.join(configDir, "google-oauth.json"),
     agentsDir: path.join(configDir, "agents"),
+    teamsDir: path.join(configDir, "teams"),
+    sessionsDir: path.join(configDir, "sessions"),
     skillsDir: path.join(configDir, "skills"),
     memoryPath: path.join(configDir, "memory.jsonl"),
     telegramStatePath: path.join(configDir, "telegram-state.json"),
@@ -92,6 +96,8 @@ export function normalizeConfig(config: ButterclawConfig): ButterclawConfig {
     configDir,
     telegramAllowedChats: config.telegramAllowedChats.map(String),
     agentsDir: path.resolve(config.agentsDir || path.join(configDir, "agents")),
+    teamsDir: path.resolve(config.teamsDir || path.join(configDir, "teams")),
+    sessionsDir: path.resolve(config.sessionsDir || path.join(configDir, "sessions")),
     skillsDir: path.resolve(config.skillsDir || path.join(configDir, "skills")),
     memoryPath: path.resolve(config.memoryPath || path.join(configDir, "memory.jsonl")),
     googleOAuthPath: path.resolve(config.googleOAuthPath || path.join(configDir, "google-oauth.json")),

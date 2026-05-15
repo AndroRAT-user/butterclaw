@@ -19,7 +19,8 @@ The setup flow:
 - asks for model, workspace, and step limits
 - keeps shell access disabled unless you explicitly enable it
 - optionally configures Telegram chat access
-- creates the config file, memory file, agents folder, and skills folder
+- creates the config file, memory file, agents folder, teams folder, sessions
+  folder, and skills folder
 - writes a tiny starter skill
 - prints the command to run next
 
@@ -64,17 +65,28 @@ Use `butterclaw google status` to check the connection and
 `butterclaw google logout` to disconnect. Use `--google-calendar-id` to override
 the calendar ID.
 
-## Agents And Skills
+## Agents, Teams, Sessions, And Skills
 
-After setup, create reusable agent profiles and skills:
+After setup, create reusable agent profiles, teams, sessions, and skills:
 
 ```cmd
 butterclaw agent create debugger --description "Finds bugs" --instructions "Find root causes first."
+butterclaw agent create reviewer --description "Reviews code" --instructions "Find bugs, missing tests, and risky behavior first."
+butterclaw team create review-crew --agents debugger,reviewer --description "Debug and review together."
 butterclaw skill create bug-hunt --description "Use for debugging." --body "Reproduce, inspect logs, run tests, then fix."
 ```
 
-Run with a saved agent:
+Run with a saved agent or a named session:
 
 ```cmd
 butterclaw --agent debugger "inspect this workspace"
+butterclaw --session release-work "continue the release checklist"
+```
+
+Inspect local state:
+
+```cmd
+butterclaw team list
+butterclaw session list
+butterclaw session show release-work
 ```

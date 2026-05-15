@@ -13,9 +13,11 @@ Telegram channel without requiring a large service stack.
 - first-run setup command
 - provider adapters for `mock`, `ollama`, and OpenAI-compatible chat APIs
 - saved agent profiles with custom instructions
+- saved agent teams that can delegate one task to several specialists
+- resumable named sessions with local transcripts
 - Gmail and Google Calendar tools using Google OAuth
 - Telegram long-polling channel for phone/chat access
-- local file tools: list, read, write, and search inside a workspace
+- local file tools: list, read, write, search, and workspace mapping
 - optional shell tool with timeout and workspace guard
 - bounded sub-agents for delegated worker tasks
 - JSONL local memory with simple relevance search
@@ -48,6 +50,21 @@ Create and use an agent:
 ```cmd
 butterclaw agent create debugger --description "Finds bugs" --instructions "Find root causes first. Reproduce before fixing."
 butterclaw --agent debugger "inspect this workspace"
+```
+
+Create a team and use it through the main agent:
+
+```cmd
+butterclaw agent create reviewer --description "Reviews code" --instructions "Find bugs, missing tests, and risky behavior first."
+butterclaw team create review-crew --agents debugger,reviewer --description "Debug and review together"
+butterclaw "ask the review-crew team to inspect this project"
+```
+
+Resume a named working session:
+
+```cmd
+butterclaw --session butter-build "remember the current goal and inspect the workspace"
+butterclaw --session butter-build "continue from where we left off"
 ```
 
 Create a skill:
@@ -138,7 +155,7 @@ Config defaults to `%APPDATA%\butterclaw\config.json` on Windows and
 Secrets stay in environment variables. Butterclaw does not issue its own API
 key; use the key from your chosen model provider.
 
-## Agents And Skills
+## Agents, Teams, Sessions, And Skills
 
 Agents are saved JSON profiles in your Butterclaw config folder. Use them for
 roles like `debugger`, `reviewer`, `builder`, or `researcher`.
@@ -148,6 +165,25 @@ butterclaw agent list
 butterclaw agent show debugger
 butterclaw agent create reviewer --description "Reviews code" --instructions "Find bugs, missing tests, and risky behavior first."
 butterclaw --agent reviewer "review the current project"
+```
+
+Teams are saved JSON profiles that point at multiple agents. The main agent can
+call them through `delegate_team`, and each member runs as a bounded sub-agent.
+
+```cmd
+butterclaw team list
+butterclaw team show review-crew
+butterclaw team create review-crew --agents debugger,reviewer --description "Debug and review together"
+```
+
+Sessions save exact user/assistant turns locally so one-off commands can resume
+context without mixing it into long-term memory.
+
+```cmd
+butterclaw --session release-work "check what is left for release"
+butterclaw session list
+butterclaw session show release-work
+butterclaw session clear release-work
 ```
 
 Skills are local Markdown files that Butterclaw loads when they match the task.
@@ -171,11 +207,12 @@ After the tool runs, Butterclaw sends the result back to the model and asks it
 to continue. This keeps the runtime portable across providers that do not
 support native tool calling.
 
-Butterclaw also exposes a `delegate_task` tool to the main agent. It starts a
-bounded sub-agent with the same workspace tools, asks it to finish one focused
-task, and returns the worker's result to the main conversation. Sub-agents can
-use saved agent profiles through the `agent` argument, but they do not get their
-own delegation tool, so delegation stays simple and finite.
+Butterclaw also exposes `workspace_map`, `delegate_task`, and `delegate_team`.
+The map tool gives the model a compact project outline. `delegate_task` starts
+one bounded sub-agent with the same workspace tools, while `delegate_team` runs
+several saved agent profiles on the same task and combines their reports.
+Sub-agents do not get their own delegation tool, so delegation stays simple and
+finite.
 
 ## Development
 

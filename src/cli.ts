@@ -6,8 +6,10 @@ import { AgentProfile, AgentStore, applyAgentProfile } from "./agents.js";
 import { TelegramChannel, TelegramError } from "./channels/telegram.js";
 import { ButterclawConfig, configPath, loadConfig, saveConfig } from "./config.js";
 import { GOOGLE_WORKSPACE_SCOPES, googleStatus, loginGoogle, logoutGoogle } from "./google.js";
+import { SessionStore } from "./sessions.js";
 import { runSetup } from "./setup.js";
 import { SkillLoader } from "./skills.js";
+import { TeamStore } from "./teams.js";
 import { splitCsv } from "./util.js";
 
 interface Args {
@@ -19,6 +21,7 @@ interface Args {
   version: boolean;
   help: boolean;
   agent?: string;
+  session?: string;
   provider?: ButterclawConfig["provider"];
   model?: string;
   baseUrl?: string;
@@ -56,8 +59,14 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (command === "agent" || command === "agents") {
     return handleCommand(() => runAgentCommand(config, args.task.slice(1)));
   }
+  if (command === "team" || command === "teams") {
+    return handleCommand(() => runTeamCommand(config, args.task.slice(1)));
+  }
   if (command === "skill" || command === "skills") {
     return handleCommand(() => runSkillCommand(config, args.task.slice(1)));
+  }
+  if (command === "session" || command === "sessions") {
+    return handleCommand(() => runSessionCommand(config, args.task.slice(1)));
   }
   if (command === "google") {
     return handleAsyncCommand(() => runGoogleCommand(config, args.task.slice(1)));
@@ -90,9 +99,9 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
 
   const task = args.task.join(" ").trim();
   if (!task) {
-    return repl(config);
+    return repl(config, agentProfile ?? undefined, args.session);
   }
-  return runOnce(config, task, agentProfile ?? undefined);
+  return runOnce(config, task, agentProfile ?? undefined, args.session);
 }
 
 export function parseArgs(argv: string[]): Args {
@@ -113,6 +122,7 @@ export function parseArgs(argv: string[]): Args {
   const valueOptions: Record<string, (value: string) => void> = {
     "--config": (value) => (args.config = value),
     "--agent": (value) => (args.agent = value),
+    "--session": (value) => (args.session = value),
     "--provider": (value) => (args.provider = value as ButterclawConfig["provider"]),
     "--model": (value) => (args.model = value),
     "--base-url": (value) => (args.baseUrl = value),
@@ -182,9 +192,12 @@ function applyOverrides(config: ButterclawConfig, args: Args): void {
   if (args.googleCalendarId) config.googleCalendarId = args.googleCalendarId;
 }
 
-async function runOnce(config: ButterclawConfig, task: string, agentProfile?: AgentProfile): Promise<number> {
+async function runOnce(config: ButterclawConfig, task: string, agentProfile?: AgentProfile, sessionName?: string): Promise<number> {
   try {
-    const result = await new ButterclawAgent(config, { ...(agentProfile ? { agentProfile } : {}) }).run(task);
+    const result = await new ButterclawAgent(config, {
+      ...(agentProfile ? { agentProfile } : {}),
+      ...(sessionName ? { sessionName } : {})
+    }).run(task);
     console.log(result.answer);
     return 0;
   } catch (error) {
@@ -204,10 +217,13 @@ async function runTelegram(config: ButterclawConfig, once: boolean, agentProfile
   }
 }
 
-async function repl(config: ButterclawConfig): Promise<number> {
+async function repl(config: ButterclawConfig, agentProfile?: AgentProfile, sessionName?: string): Promise<number> {
   console.log("Butterclaw REPL. Type 'exit' or press Ctrl+C to quit.");
   const rl = readline.createInterface({ input, output });
-  const agent = new ButterclawAgent(config);
+  const agent = new ButterclawAgent(config, {
+    ...(agentProfile ? { agentProfile } : {}),
+    ...(sessionName ? { sessionName } : {})
+  });
   try {
     while (true) {
       const task = (await rl.question("> ")).trim();
@@ -256,6 +272,38 @@ export function runAgentCommand(config: ButterclawConfig, argv: string[], output
   throw new Error("Usage: butterclaw agent list | show <name> | create <name> [--description text] [--instructions text] [--model name] [--provider name] [--force]");
 }
 
+export function runTeamCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): number {
+  const store = new TeamStore(config.teamsDir);
+  const command = argv[0]?.toLowerCase() ?? "list";
+  if (command === "list") {
+    const teams = store.list();
+    outputFunc(teams.length ? teams.map((team) => `${team.name}: ${team.agents.join(", ")} - ${team.description}`).join("\n") : "No teams yet.");
+    return 0;
+  }
+  if (command === "show") {
+    const name = argv[1] ?? "";
+    const team = store.get(name);
+    if (!team) throw new Error(`Unknown team: ${name}`);
+    outputFunc(JSON.stringify(team, null, 2));
+    return 0;
+  }
+  if (command === "create") {
+    const parsed = parseCommandOptions(argv.slice(1));
+    const name = parsed.positionals[0] ?? "";
+    const agents = parsed.values.agents ?? parsed.values.agent ?? parsed.positionals.slice(1).join(",");
+    const team = store.create({
+      name,
+      agents,
+      description: parsed.values.description,
+      instructions: parsed.values.instructions ?? parsed.values.prompt,
+      overwrite: parsed.flags.has("force")
+    });
+    outputFunc(`Created team ${team.name} in ${config.teamsDir}`);
+    return 0;
+  }
+  throw new Error("Usage: butterclaw team list | show <name> | create <name> --agents <agent1,agent2> [--description text] [--instructions text] [--force]");
+}
+
 export function runSkillCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): number {
   const loader = new SkillLoader(config.skillsDir, config.maxSkillChars);
   const command = argv[0]?.toLowerCase() ?? "list";
@@ -284,6 +332,32 @@ export function runSkillCommand(config: ButterclawConfig, argv: string[], output
     return 0;
   }
   throw new Error("Usage: butterclaw skill list | show <name> | create <name> [--description text] [--body text] [--force]");
+}
+
+export function runSessionCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): number {
+  const store = new SessionStore(config.sessionsDir);
+  const command = argv[0]?.toLowerCase() ?? "list";
+  if (command === "list") {
+    const sessions = store.list();
+    outputFunc(
+      sessions.length
+        ? sessions.map((session) => `${session.name}: ${session.turns} turn(s), updated ${session.updatedAt}`).join("\n")
+        : "No sessions yet."
+    );
+    return 0;
+  }
+  if (command === "show") {
+    const name = argv[1] ?? "";
+    outputFunc(store.format(name));
+    return 0;
+  }
+  if (command === "clear") {
+    const name = argv[1] ?? "";
+    const cleared = store.clear(name);
+    outputFunc(cleared ? `Cleared session ${name}` : `No session found: ${name}`);
+    return 0;
+  }
+  throw new Error("Usage: butterclaw session list | show <name> | clear <name>");
 }
 
 export async function runGoogleCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): Promise<number> {
@@ -340,7 +414,7 @@ function parseCommandOptions(argv: string[]): { positionals: string[]; values: R
       continue;
     }
     const key = arg.slice(2);
-    if (key === "force") {
+    if (key === "force" || key === "no-browser") {
       flags.add(key);
       continue;
     }
@@ -359,6 +433,7 @@ Options:
   --show-tools                    Print available tools
   --version                       Print version
   --agent <name>                  Run as a saved agent profile
+  --session <name>                Resume and save a named session
   --provider <mock|ollama|openai-compatible>
   --model <model>
   --base-url <url>
@@ -382,8 +457,12 @@ Options:
 Commands:
   butterclaw agent list
   butterclaw agent create <name> --description <text> --instructions <text>
+  butterclaw team list
+  butterclaw team create <name> --agents <agent1,agent2>
   butterclaw skill list
   butterclaw skill create <name> --description <text> --body <text>
+  butterclaw session list
+  butterclaw session show <name>
   butterclaw google login
   butterclaw google status
   butterclaw google logout`);

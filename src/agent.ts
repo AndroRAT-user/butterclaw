@@ -2,7 +2,9 @@ import { AgentProfile, AgentStore, applyAgentProfile } from "./agents.js";
 import { ButterclawConfig } from "./config.js";
 import { LocalMemory } from "./memory.js";
 import { buildProvider, Message, Provider } from "./providers.js";
+import { SessionStore } from "./sessions.js";
 import { SkillLoader } from "./skills.js";
+import { TeamStore } from "./teams.js";
 import { buildDefaultRegistry, ToolRegistry, ToolResult } from "./tools.js";
 import { UsageTracker } from "./usage.js";
 import { isRecord, truncate } from "./util.js";
@@ -20,6 +22,9 @@ export class ButterclawAgent {
   private readonly memory: LocalMemory;
   private readonly skills: SkillLoader;
   private readonly recordMemory: boolean;
+  private readonly recordSession: boolean;
+  private readonly sessionName?: string;
+  private readonly sessionStore?: SessionStore;
   private readonly agentProfile?: AgentProfile;
 
   constructor(
@@ -31,6 +36,9 @@ export class ButterclawAgent {
       usage?: UsageTracker;
       enableDelegation?: boolean;
       recordMemory?: boolean;
+      recordSession?: boolean;
+      sessionName?: string;
+      sessionStore?: SessionStore;
       agentProfile?: AgentProfile;
     } = {}
   ) {
@@ -40,6 +48,9 @@ export class ButterclawAgent {
     this.usage = options.usage ?? UsageTracker.fromConfig(config);
     this.skills = new SkillLoader(config.skillsDir, config.maxSkillChars);
     this.recordMemory = options.recordMemory ?? true;
+    this.recordSession = options.recordSession ?? Boolean(options.sessionName);
+    this.sessionName = options.sessionName;
+    this.sessionStore = options.sessionStore ?? (options.sessionName ? new SessionStore(config.sessionsDir) : undefined);
     this.agentProfile = options.agentProfile;
     if (options.enableDelegation !== false) {
       this.registerDelegationTool();
@@ -53,7 +64,7 @@ export class ButterclawAgent {
       this.usage.record(response);
       const toolCall = parseToolCall(response.content);
       if (!toolCall) {
-        this.remember(userInput, response.content);
+        this.finishRun(userInput, response.content);
         return { answer: response.content, steps: step, usage: this.usage.current() };
       }
 
@@ -68,23 +79,31 @@ export class ButterclawAgent {
 
     const fallback =
       "I reached the configured step limit before finishing. Try raising --max-steps or splitting the task into smaller pieces.";
-    this.remember(userInput, fallback);
+    this.finishRun(userInput, fallback);
     return { answer: fallback, steps: this.config.maxSteps, usage: this.usage.current() };
   }
 
   private buildMessages(userInput: string): Message[] {
-    return [
-      {
-        role: "system",
-        content: buildSystemPrompt(
-          this.registry,
-          this.memory.search(userInput, this.config.memoryItems),
-          this.skills.relevantTo(userInput),
-          this.agentProfile
-        )
-      },
-      { role: "user", content: userInput }
-    ];
+    const sessionMessages =
+      this.sessionName && this.sessionStore
+        ? this.sessionStore.read(this.sessionName).map((turn): Message => ({ role: turn.role, content: turn.content }))
+        : [];
+    return trimMessages(
+      [
+        {
+          role: "system",
+          content: buildSystemPrompt(
+            this.registry,
+            this.memory.search(userInput, this.config.memoryItems),
+            this.skills.relevantTo(userInput),
+            this.agentProfile
+          )
+        },
+        ...sessionMessages,
+        { role: "user", content: userInput }
+      ],
+      this.config.maxContextChars
+    );
   }
 
   private registerDelegationTool(): void {
@@ -95,9 +114,21 @@ export class ButterclawAgent {
         task: "focused task for the sub-agent",
         agent: "optional named agent profile to use",
         role: "optional short role name, default worker",
-        maxSteps: "optional worker step limit, capped below the main agent limit"
+        maxSteps: "optional worker step limit, capped below the main agent limit",
+        maxOutputChars: "optional output limit"
       },
       handler: (args) => this.delegateTask(args)
+    });
+    this.registry.register({
+      name: "delegate_team",
+      description: "Ask a saved team of named agents to work on one bounded task and combine their reports",
+      args: {
+        team: "saved team name",
+        task: "focused task for the team",
+        maxSteps: "optional worker step limit for each team member",
+        maxOutputChars: "optional combined output limit"
+      },
+      handler: (args) => this.delegateTeam(args)
     });
   }
 
@@ -138,12 +169,63 @@ export class ButterclawAgent {
     };
   }
 
-  private remember(userInput: string, answer: string): void {
-    if (!this.recordMemory) {
-      return;
+  private async delegateTeam(args: Record<string, unknown>): Promise<ToolResult> {
+    const teamName = String(args.team ?? args.name ?? "").trim();
+    const task = String(args.task ?? args.prompt ?? "").trim();
+    if (!teamName) {
+      return { ok: false, output: "team is required" };
     }
-    this.memory.add("user", userInput);
-    this.memory.add("assistant", answer);
+    if (!task) {
+      return { ok: false, output: "task is required" };
+    }
+    const team = new TeamStore(this.config.teamsDir).get(teamName);
+    if (!team) {
+      return { ok: false, output: `Unknown team: ${teamName}` };
+    }
+
+    const maxSteps = boundedInt(args.maxSteps, 1, Math.max(1, this.config.maxSteps - 1), Math.min(3, this.config.maxSteps));
+    const maxOutputChars = boundedInt(args.maxOutputChars, 1_000, 40_000, 16_000);
+    const teamTask = [
+      `Team mission: ${task}`,
+      team.instructions ? `Team instructions:\n${team.instructions}` : "",
+      "Work from your saved agent profile and return concise, useful results."
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    const reports: Array<{ agent: string; result: ToolResult }> = [];
+    for (const agent of team.agents) {
+      reports.push({
+        agent,
+        result: await this.delegateTask({
+          agent,
+          task: teamTask,
+          maxSteps,
+          maxOutputChars: Math.min(8_000, maxOutputChars)
+        })
+      });
+    }
+    const ok = reports.every((report) => report.result.ok);
+    const body = reports.map((report) => `## ${report.agent}\n${report.result.ok ? report.result.output : `ERROR: ${report.result.output}`}`).join("\n\n");
+    return {
+      ok,
+      output: truncate(`Team ${team.name} finished ${ok ? "successfully" : "with errors"}:\n\n${body}`, maxOutputChars)
+    };
+  }
+
+  private finishRun(userInput: string, answer: string): void {
+    this.remember(userInput, answer);
+    if (this.recordSession && this.sessionName && this.sessionStore) {
+      this.sessionStore.append(this.sessionName, "user", userInput);
+      this.sessionStore.append(this.sessionName, "assistant", answer);
+    }
+  }
+
+  private remember(userInput: string, answer: string): void {
+    if (this.recordMemory) {
+      this.memory.add("user", userInput);
+      this.memory.add("assistant", answer);
+    }
   }
 }
 
@@ -159,9 +241,13 @@ export function buildSystemPrompt(
     ? `Name: ${agentProfile.name}\nDescription: ${agentProfile.description}\nInstructions:\n${agentProfile.instructions}`
     : "Default Butterclaw agent.";
   const toolDocs = registry.describe();
-  const delegationHint = toolDocs.includes("- delegate_task:")
-    ? "\nUse delegate_task when a focused sub-agent can inspect, research, or carry out a small part of the task independently.\n"
-    : "";
+  const delegationNotes = [
+    toolDocs.includes("- delegate_task:") ? "Use delegate_task for one focused sub-agent." : "",
+    toolDocs.includes("- delegate_team:")
+      ? "Use delegate_team when several saved agents should attack the same task from different specialties."
+      : ""
+  ].filter(Boolean);
+  const delegationHint = delegationNotes.length ? `\n${delegationNotes.join(" ")}\n` : "";
   return `You are Butterclaw, a lightweight local-first agent.
 
 Use short, direct reasoning. Prefer small, reversible steps. Avoid unnecessary work when a focused action solves the task.

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ButterclawConfig } from "./config.js";
 import { registerGoogleTools } from "./google.js";
-import { ensureParent, truncate } from "./util.js";
+import { ensureParent, isRecord, truncate } from "./util.js";
 
 export interface ToolResult {
   ok: boolean;
@@ -136,6 +136,51 @@ class WorkspaceTools {
     return { ok: true, output: matches.join("\n") || "No matches" };
   };
 
+  workspaceMap = (args: Record<string, unknown>): ToolResult => {
+    const root = this.resolve(String(args.path ?? "."));
+    if (!fs.existsSync(root)) {
+      return { ok: false, output: `Path does not exist: ${root}` };
+    }
+    if (!fs.statSync(root).isDirectory()) {
+      return { ok: false, output: `Path is not a directory: ${root}` };
+    }
+
+    const maxFiles = boundedInt(args.maxFiles, 20, 2_000, 300);
+    const maxDepth = boundedInt(args.maxDepth, 0, 12, 4);
+    const state: WorkspaceMapState = {
+      files: 0,
+      dirs: 0,
+      truncated: false,
+      directories: [],
+      extensions: new Map(),
+      notable: [],
+      packageScripts: []
+    };
+    this.mapWalk(root, 0, maxDepth, maxFiles, state);
+    const relRoot = relativePath(this.root, root);
+    const extensions = [...state.extensions.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .slice(0, 12)
+      .map(([ext, count]) => `${ext}: ${count}`)
+      .join(", ");
+    const lines = [
+      `Workspace map for ${relRoot}`,
+      `Files scanned: ${state.files}${state.truncated ? ` (stopped at maxFiles ${maxFiles})` : ""}`,
+      `Directories seen: ${state.dirs}`,
+      `Extensions: ${extensions || "none"}`,
+      "",
+      "Package scripts:",
+      state.packageScripts.length ? state.packageScripts.slice(0, 20).join("\n") : "- none found",
+      "",
+      "Notable files:",
+      state.notable.length ? state.notable.slice(0, 40).map((file) => `- ${file}`).join("\n") : "- none found",
+      "",
+      "Directories:",
+      state.directories.length ? state.directories.slice(0, 40).map((dir) => `- ${dir}`).join("\n") : "- none found"
+    ];
+    return { ok: true, output: lines.join("\n") };
+  };
+
   runShell = (args: Record<string, unknown>): ToolResult => {
     if (this.config.shellMode !== "allow") {
       return { ok: false, output: "Shell tool is disabled. Re-run with --allow-shell to enable it." };
@@ -189,6 +234,57 @@ class WorkspaceTools {
       }
     }
   }
+
+  private mapWalk(root: string, depth: number, maxDepth: number, maxFiles: number, state: WorkspaceMapState): void {
+    if (!fs.existsSync(root) || state.files >= maxFiles) {
+      return;
+    }
+    for (const entry of fs.readdirSync(root).sort((a, b) => a.localeCompare(b))) {
+      if (state.files >= maxFiles) {
+        state.truncated = true;
+        return;
+      }
+      const full = path.join(root, entry);
+      const stat = fs.statSync(full);
+      if (stat.isDirectory()) {
+        if (shouldSkipDir(entry)) {
+          continue;
+        }
+        state.dirs += 1;
+        if (depth < maxDepth) {
+          state.directories.push(`${relativePath(this.root, full)}/`);
+          this.mapWalk(full, depth + 1, maxDepth, maxFiles, state);
+        }
+        continue;
+      }
+      if (!stat.isFile()) {
+        continue;
+      }
+      state.files += 1;
+      const rel = relativePath(this.root, full);
+      const ext = path.extname(entry).toLowerCase() || "[none]";
+      state.extensions.set(ext, (state.extensions.get(ext) ?? 0) + 1);
+      if (isNotableFile(entry)) {
+        state.notable.push(rel);
+      }
+      if (entry === "package.json") {
+        const scripts = readPackageScripts(full);
+        if (scripts.length) {
+          state.packageScripts.push(`- ${rel}: ${scripts.join(", ")}`);
+        }
+      }
+    }
+  }
+}
+
+interface WorkspaceMapState {
+  files: number;
+  dirs: number;
+  truncated: boolean;
+  directories: string[];
+  extensions: Map<string, number>;
+  notable: string[];
+  packageScripts: string[];
 }
 
 export function buildDefaultRegistry(config: ButterclawConfig): ToolRegistry {
@@ -220,6 +316,12 @@ export function buildDefaultRegistry(config: ButterclawConfig): ToolRegistry {
       handler: workspace.searchFiles
     },
     {
+      name: "workspace_map",
+      description: "Summarize workspace structure, notable files, extensions, and package scripts",
+      args: { path: "relative directory, default '.'", maxFiles: "optional file scan limit", maxDepth: "optional directory depth" },
+      handler: workspace.workspaceMap
+    },
+    {
       name: "run_shell",
       description: "Run a shell command in the workspace when explicitly enabled",
       args: { command: "command string", timeout: "seconds, capped by config" },
@@ -229,5 +331,37 @@ export function buildDefaultRegistry(config: ButterclawConfig): ToolRegistry {
   specs.forEach((spec) => registry.register(spec));
   registerGoogleTools(registry, config);
   return registry;
+}
+
+function boundedInt(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
+}
+
+function relativePath(root: string, file: string): string {
+  return path.relative(root, file).replace(/\\/g, "/") || ".";
+}
+
+function shouldSkipDir(name: string): boolean {
+  return new Set([".git", ".next", ".turbo", "build", "coverage", "dist", "node_modules"]).has(name);
+}
+
+function isNotableFile(name: string): boolean {
+  return /^(README|CHANGELOG|LICENSE|package|tsconfig|vite\.config|next\.config|Dockerfile|\.env\.example)/i.test(name);
+}
+
+function readPackageScripts(file: string): string[] {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8")) as unknown;
+    if (isRecord(parsed) && isRecord(parsed.scripts)) {
+      return Object.keys(parsed.scripts).sort((a, b) => a.localeCompare(b));
+    }
+  } catch {
+    return [];
+  }
+  return [];
 }
 

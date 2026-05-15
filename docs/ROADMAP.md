@@ -10,8 +10,10 @@ powers with fewer moving pieces.
 - first-run setup/onboarding command
 - mock, Ollama, and OpenAI-compatible providers
 - saved agent profiles
+- saved agent teams
+- resumable named sessions
 - Gmail and Google Calendar tools
-- workspace-confined file tools
+- workspace-confined file tools and workspace mapping
 - optional shell tool
 - bounded sub-agents for focused delegated tasks
 - JSONL memory
@@ -22,7 +24,6 @@ powers with fewer moving pieces.
 
 ## Milestone 1: Better Local Agent Experience
 
-- resumable sessions
 - streaming output
 - richer planning traces
 - per-tool permissions

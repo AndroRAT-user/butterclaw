@@ -2,9 +2,9 @@ import { ButterclawConfig } from "./config.js";
 import { LocalMemory } from "./memory.js";
 import { buildProvider, Message, Provider } from "./providers.js";
 import { SkillLoader } from "./skills.js";
-import { buildDefaultRegistry, ToolRegistry } from "./tools.js";
+import { buildDefaultRegistry, ToolRegistry, ToolResult } from "./tools.js";
 import { UsageTracker } from "./usage.js";
-import { isRecord } from "./util.js";
+import { isRecord, truncate } from "./util.js";
 
 export interface AgentRun {
   answer: string;
@@ -18,6 +18,7 @@ export class ButterclawAgent {
   private readonly provider: Provider;
   private readonly memory: LocalMemory;
   private readonly skills: SkillLoader;
+  private readonly recordMemory: boolean;
 
   constructor(
     private readonly config: ButterclawConfig,
@@ -26,6 +27,8 @@ export class ButterclawAgent {
       registry?: ToolRegistry;
       memory?: LocalMemory;
       usage?: UsageTracker;
+      enableDelegation?: boolean;
+      recordMemory?: boolean;
     } = {}
   ) {
     this.provider = options.provider ?? buildProvider(config);
@@ -33,6 +36,10 @@ export class ButterclawAgent {
     this.memory = options.memory ?? new LocalMemory(config.memoryPath);
     this.usage = options.usage ?? UsageTracker.fromConfig(config);
     this.skills = new SkillLoader(config.skillsDir, config.maxSkillChars);
+    this.recordMemory = options.recordMemory ?? true;
+    if (options.enableDelegation !== false) {
+      this.registerDelegationTool();
+    }
   }
 
   async run(userInput: string): Promise<AgentRun> {
@@ -42,12 +49,11 @@ export class ButterclawAgent {
       this.usage.record(response);
       const toolCall = parseToolCall(response.content);
       if (!toolCall) {
-        this.memory.add("user", userInput);
-        this.memory.add("assistant", response.content);
+        this.remember(userInput, response.content);
         return { answer: response.content, steps: step, usage: this.usage.current() };
       }
 
-      const result = this.registry.call(toolCall.tool, toolCall.args ?? {});
+      const result = await this.registry.call(toolCall.tool, toolCall.args ?? {});
       messages.push({ role: "assistant", content: response.content });
       messages.push({
         role: "user",
@@ -58,8 +64,7 @@ export class ButterclawAgent {
 
     const fallback =
       "I reached the configured step limit before finishing. Try raising --max-steps or splitting the task into smaller pieces.";
-    this.memory.add("user", userInput);
-    this.memory.add("assistant", fallback);
+    this.remember(userInput, fallback);
     return { answer: fallback, steps: this.config.maxSteps, usage: this.usage.current() };
   }
 
@@ -76,6 +81,53 @@ export class ButterclawAgent {
       { role: "user", content: userInput }
     ];
   }
+
+  private registerDelegationTool(): void {
+    this.registry.register({
+      name: "delegate_task",
+      description: "Ask a focused sub-agent to work on a bounded task and report back",
+      args: {
+        task: "focused task for the sub-agent",
+        role: "optional short role name, default worker",
+        maxSteps: "optional worker step limit, capped below the main agent limit"
+      },
+      handler: (args) => this.delegateTask(args)
+    });
+  }
+
+  private async delegateTask(args: Record<string, unknown>): Promise<ToolResult> {
+    const task = String(args.task ?? args.prompt ?? "").trim();
+    if (!task) {
+      return { ok: false, output: "task is required" };
+    }
+
+    const role = truncate(String(args.role ?? "worker").trim() || "worker", 80);
+    const maxSteps = boundedInt(args.maxSteps, 1, Math.max(1, this.config.maxSteps - 1), Math.min(3, this.config.maxSteps));
+    const maxOutputChars = boundedInt(args.maxOutputChars, 500, 20_000, 8_000);
+    const workerConfig = { ...this.config, maxSteps };
+    const worker = new ButterclawAgent(workerConfig, {
+      provider: this.provider,
+      registry: buildDefaultRegistry(workerConfig),
+      memory: this.memory,
+      usage: this.usage,
+      enableDelegation: false,
+      recordMemory: false
+    });
+
+    const result = await worker.run(`You are a focused ${role} sub-agent. Complete this task and report only useful results:\n${task}`);
+    return {
+      ok: true,
+      output: truncate(`Sub-agent ${role} finished in ${result.steps} step(s):\n${result.answer}`, maxOutputChars)
+    };
+  }
+
+  private remember(userInput: string, answer: string): void {
+    if (!this.recordMemory) {
+      return;
+    }
+    this.memory.add("user", userInput);
+    this.memory.add("assistant", answer);
+  }
 }
 
 export function buildSystemPrompt(registry: ToolRegistry, memoryItems: string[], skills: string[]): string {
@@ -91,6 +143,8 @@ ${registry.describe()}
 To use a tool, respond with one JSON object and nothing else:
 {"tool":"tool_name","args":{"key":"value"}}
 
+Use delegate_task when a focused sub-agent can inspect, research, or carry out a small part of the task independently.
+
 For normal answers, respond in plain text. Do not wrap final answers in JSON.
 
 Relevant memory:
@@ -99,6 +153,14 @@ ${memoryBlock}
 Relevant skills:
 ${skillsBlock}
 `;
+}
+
+function boundedInt(value: unknown, min: number, max: number, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
 }
 
 interface ToolCall {

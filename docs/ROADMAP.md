@@ -11,6 +11,7 @@ powers with fewer moving pieces.
 - mock, Ollama, and OpenAI-compatible providers
 - workspace-confined file tools
 - optional shell tool
+- bounded sub-agents for focused delegated tasks
 - JSONL memory
 - Markdown skills
 - Telegram long-polling channel

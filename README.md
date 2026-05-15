@@ -15,6 +15,7 @@ Telegram channel without requiring a large service stack.
 - Telegram long-polling channel for phone/chat access
 - local file tools: list, read, write, and search inside a workspace
 - optional shell tool with timeout and workspace guard
+- bounded sub-agents for delegated worker tasks
 - JSONL local memory with simple relevance search
 - Markdown skill loading from a local skills folder
 - local usage tracking
@@ -117,6 +118,11 @@ single JSON object for a tool call:
 After the tool runs, Butterclaw sends the result back to the model and asks it
 to continue. This keeps the runtime portable across providers that do not
 support native tool calling.
+
+Butterclaw also exposes a `delegate_task` tool to the main agent. It starts a
+bounded sub-agent with the same workspace tools, asks it to finish one focused
+task, and returns the worker's result to the main conversation. Sub-agents do
+not get their own delegation tool, so delegation stays simple and finite.
 
 ## Development
 

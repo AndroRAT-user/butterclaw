@@ -47,6 +47,9 @@ export class MockProvider implements Provider {
     if (last.includes("tool result for")) {
       return { content: "I checked the workspace and finished the requested step." };
     }
+    if ((last.includes("delegate") || last.includes("sub-agent") || last.includes("sub agent")) && last.includes("list")) {
+      return { content: '{"tool":"delegate_task","args":{"role":"scout","task":"list the files in this workspace"}}' };
+    }
     if (last.includes("list") && (last.includes("file") || last.includes("workspace"))) {
       return { content: '{"tool":"list_dir","args":{"path":"."}}' };
     }

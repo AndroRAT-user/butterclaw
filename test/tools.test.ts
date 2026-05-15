@@ -6,20 +6,20 @@ import test from "node:test";
 import { defaultConfig } from "../src/config.js";
 import { buildDefaultRegistry } from "../src/tools.js";
 
-test("workspace write and read stays inside root", () => {
+test("workspace write and read stays inside root", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "butterclaw-tools-"));
   const registry = buildDefaultRegistry(defaultConfig({ workspace: root, configDir: path.join(root, ".config") }));
-  const write = registry.call("write_file", { path: "notes/todo.txt", content: "ship it" });
+  const write = await registry.call("write_file", { path: "notes/todo.txt", content: "ship it" });
   assert.equal(write.ok, true);
-  const read = registry.call("read_file", { path: "notes/todo.txt" });
+  const read = await registry.call("read_file", { path: "notes/todo.txt" });
   assert.equal(read.ok, true);
   assert.equal(read.output, "ship it");
 });
 
-test("workspace blocks path escape", () => {
+test("workspace blocks path escape", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "butterclaw-tools-"));
   const registry = buildDefaultRegistry(defaultConfig({ workspace: root, configDir: path.join(root, ".config") }));
-  const result = registry.call("read_file", { path: "../outside.txt" });
+  const result = await registry.call("read_file", { path: "../outside.txt" });
   assert.equal(result.ok, false);
   assert.match(result.output, /Path escapes workspace/);
 });

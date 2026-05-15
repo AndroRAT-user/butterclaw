@@ -5,7 +5,6 @@ import { ButterclawAgent } from "./agent.js";
 import { TelegramChannel, TelegramError } from "./channels/telegram.js";
 import { ButterclawConfig, configPath, loadConfig, saveConfig } from "./config.js";
 import { runSetup } from "./setup.js";
-import { buildDefaultRegistry } from "./tools.js";
 import { splitCsv } from "./util.js";
 
 interface Args {
@@ -57,7 +56,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
     return 0;
   }
   if (args.showTools) {
-    console.log(buildDefaultRegistry(config).describe());
+    console.log(new ButterclawAgent(config).registry.describe());
     return 0;
   }
   if (args.telegramPoll) {

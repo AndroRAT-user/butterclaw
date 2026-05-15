@@ -9,7 +9,7 @@ export interface ToolResult {
   output: string;
 }
 
-type ToolHandler = (args: Record<string, unknown>) => ToolResult;
+type ToolHandler = (args: Record<string, unknown>) => ToolResult | Promise<ToolResult>;
 
 interface ToolSpec {
   name: string;
@@ -25,13 +25,13 @@ export class ToolRegistry {
     this.tools.set(spec.name, spec);
   }
 
-  call(name: string, args: Record<string, unknown>): ToolResult {
+  async call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
     const spec = this.tools.get(name);
     if (!spec) {
       return { ok: false, output: `Unknown tool: ${name}` };
     }
     try {
-      return spec.handler(args);
+      return await spec.handler(args);
     } catch (error) {
       return { ok: false, output: `${error instanceof Error ? error.name : "Error"}: ${String(error)}` };
     }

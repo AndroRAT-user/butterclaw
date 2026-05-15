@@ -28,3 +28,25 @@ test("mock agent runs a tool", async () => {
   assert.equal(result.steps, 2);
 });
 
+test("agent can delegate to a bounded sub-agent", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "butterclaw-agent-"));
+  fs.writeFileSync(path.join(root, "hello.txt"), "hi", "utf8");
+  const config = defaultConfig({
+    workspace: root,
+    configDir: path.join(root, ".config"),
+    memoryPath: path.join(root, ".config", "memory.jsonl"),
+    skillsDir: path.join(root, ".config", "skills"),
+    telegramStatePath: path.join(root, ".config", "telegram-state.json")
+  });
+  const agent = new ButterclawAgent(config);
+  const delegated = await agent.registry.call("delegate_task", {
+    role: "scout",
+    task: "list the files in this workspace"
+  });
+
+  assert.equal(delegated.ok, true);
+  assert.match(delegated.output, /Sub-agent scout finished/);
+  assert.match(delegated.output, /finished/);
+  assert.equal(fs.existsSync(config.memoryPath), false);
+});
+

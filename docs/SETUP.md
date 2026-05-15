@@ -3,13 +3,13 @@
 Butterclaw includes a small onboarding command:
 
 ```cmd
-npm run setup
+butterclaw --setup
 ```
 
 You can also run:
 
 ```cmd
-npm start -- setup
+butterclaw setup
 ```
 
 The setup flow:
@@ -46,5 +46,5 @@ environment variable name. Set the token before running Telegram:
 
 ```cmd
 set TELEGRAM_BOT_TOKEN=123456:your-token
-npm start -- --telegram-poll
+butterclaw --telegram-poll
 ```

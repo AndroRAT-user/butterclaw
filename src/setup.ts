@@ -18,7 +18,16 @@ export async function runSetup(
   let rl: readline.Interface | null = null;
   if (!inputFunc) {
     rl = readline.createInterface({ input, output });
-    inputFunc = (question: string) => rl!.question(question);
+    inputFunc = async (question: string) => {
+      try {
+        return await rl!.question(question);
+      } catch (error) {
+        if (error && typeof error === "object" && "code" in error && error.code === "ERR_USE_AFTER_CLOSE") {
+          return "";
+        }
+        throw error;
+      }
+    };
   }
 
   try {
@@ -64,12 +73,12 @@ export async function runSetup(
     outputFunc(`Memory file: ${config.memoryPath}`);
     outputFunc("");
     outputFunc("Try it now:");
-    outputFunc(`  npm start -- --config "${targetPath}" "list the files in this workspace"`);
+    outputFunc(`  butterclaw --config "${targetPath}" "list the files in this workspace"`);
     if (config.provider === "ollama") {
       outputFunc("");
       outputFunc("For Telegram with Ollama:");
       outputFunc(`  set ${config.telegramTokenEnv}=123456:your-token`);
-      outputFunc(`  npm start -- --config "${targetPath}" --telegram-poll --telegram-allowed-chat YOUR_CHAT_ID`);
+      outputFunc(`  butterclaw --config "${targetPath}" --telegram-poll --telegram-allowed-chat YOUR_CHAT_ID`);
     } else if (config.provider === "openai-compatible") {
       outputFunc("");
       outputFunc("Before using the API provider:");
@@ -211,4 +220,3 @@ function commandExists(command: string): boolean {
 function majorNodeVersion(): number {
   return Number(process.versions.node.split(".")[0] ?? 0);
 }
-

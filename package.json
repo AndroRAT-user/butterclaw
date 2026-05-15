@@ -4,13 +4,16 @@
   "description": "Lightweight local agent runtime.",
   "type": "module",
   "bin": {
-    "butterclaw": "./dist/src/cli.js"
+    "butterclaw": "./dist/src/bin.js",
+    "buterclaw": "./dist/src/bin.js"
   },
   "scripts": {
     "build": "tsc",
+    "prepare": "npm run build",
+    "install:local": "npm install -g .",
     "test": "tsc && node --test \"dist/test/**/*.test.js\"",
-    "start": "node dist/src/cli.js",
-    "setup": "node dist/src/cli.js setup"
+    "start": "node dist/src/bin.js",
+    "setup": "node dist/src/bin.js setup"
   },
   "keywords": [
     "agent",

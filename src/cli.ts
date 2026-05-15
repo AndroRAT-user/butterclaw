@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
-import { pathToFileURL } from "node:url";
 import { ButterclawAgent } from "./agent.js";
 import { TelegramChannel, TelegramError } from "./channels/telegram.js";
 import { ButterclawConfig, configPath, loadConfig, saveConfig } from "./config.js";
@@ -258,10 +257,4 @@ Options:
   --telegram-allowed-chat <id>
   --telegram-timeout <seconds>
   --telegram-idle-sleep <seconds>`);
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  main().then((code) => {
-    process.exitCode = code;
-  });
 }

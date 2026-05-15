@@ -21,26 +21,26 @@ Telegram channel without requiring a large service stack.
 
 ## Quick Start
 
-Install dependencies and build:
+Install the CLI from the repo:
 
 ```cmd
 npm install
-npm run build
+npm install -g .
 ```
 
 Run first-time setup:
 
 ```cmd
-npm run setup
+butterclaw --setup
 ```
 
-Try the local mock provider:
+Start Butterclaw:
 
 ```cmd
-npm start -- --provider mock "list the files in this workspace"
+butterclaw
 ```
 
-After `npm install -g .` or `npm link`, you can use the direct CLI:
+Run a one-off task:
 
 ```cmd
 butterclaw --provider mock "hello"
@@ -51,27 +51,27 @@ butterclaw --provider mock "hello"
 Use Ollama:
 
 ```cmd
-npm start -- --provider ollama --model llama3.2:3b "summarize README.md"
+butterclaw --provider ollama --model llama3.2:3b "summarize README.md"
 ```
 
 Use an OpenAI-compatible endpoint:
 
 ```cmd
 set BUTTERCLAW_API_KEY=your-api-key
-npm start -- --provider openai-compatible --base-url https://api.openai.com/v1 --model gpt-4.1-mini "make a plan for my project"
+butterclaw --provider openai-compatible --base-url https://api.openai.com/v1 --model gpt-4.1-mini "make a plan for my project"
 ```
 
 Enable shell commands only when you actually need them:
 
 ```cmd
-npm start -- --allow-shell "run the tests and tell me what failed"
+butterclaw --allow-shell "run the tests and tell me what failed"
 ```
 
 ## Telegram
 
 ```cmd
 set TELEGRAM_BOT_TOKEN=123456:your-token
-npm start -- --telegram-poll --provider ollama --model llama3.2:3b --telegram-allowed-chat 123456789
+butterclaw --telegram-poll --provider ollama --model llama3.2:3b --telegram-allowed-chat 123456789
 ```
 
 The Telegram channel uses long polling, stores its update offset locally, and
@@ -85,19 +85,19 @@ See [docs/TELEGRAM.md](docs/TELEGRAM.md).
 Interactive setup:
 
 ```cmd
-npm run setup
+butterclaw --setup
 ```
 
 Or:
 
 ```cmd
-npm start -- setup
+butterclaw setup
 ```
 
 Create a starter config without prompts:
 
 ```cmd
-npm start -- --init-config
+butterclaw --init-config
 ```
 
 Config defaults to `%APPDATA%\butterclaw\config.json` on Windows and
@@ -130,4 +130,3 @@ Butterclaw confines file tools to the chosen workspace by default, denies shell
 commands by default, and keeps memory local. Agents with tools can still make
 mistakes. Review generated writes, do not run untrusted skills, and keep API
 keys out of prompts and memory.
-

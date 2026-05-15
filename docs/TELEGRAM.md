@@ -16,7 +16,7 @@ set TELEGRAM_BOT_TOKEN=123456:your-token
 3. Start Butterclaw:
 
 ```cmd
-npm start -- --telegram-poll --provider ollama --model llama3.2:3b --telegram-allowed-chat 123456789
+butterclaw --telegram-poll --provider ollama --model llama3.2:3b --telegram-allowed-chat 123456789
 ```
 
 ## Finding Your Chat ID
@@ -38,4 +38,3 @@ Use `--telegram-allowed-chat` in real use. Without it, anyone who can message
 the bot can ask Butterclaw to act within the permissions you gave the host
 process. The shell tool is still disabled unless the host starts Butterclaw with
 `--allow-shell`.
-

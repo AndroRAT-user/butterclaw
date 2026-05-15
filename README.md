@@ -32,6 +32,15 @@ to misconfigure. Butterclaw starts from the opposite end:
 
 ## Quick Start
 
+For first-time setup:
+
+```powershell
+python -m butterclaw setup
+```
+
+This writes a local config, creates memory and skills folders, checks the
+machine, and prints the next command to run. See [docs/SETUP.md](docs/SETUP.md).
+
 Run the mock provider first. It needs no API key and proves the agent loop and
 tool runtime are working:
 
@@ -72,7 +81,13 @@ See [docs/TELEGRAM.md](docs/TELEGRAM.md) for setup notes.
 
 ## Configuration
 
-Create a starter config:
+Run the interactive setup:
+
+```powershell
+python -m butterclaw setup
+```
+
+Or create a starter config without prompts:
 
 ```powershell
 python -m butterclaw --init-config

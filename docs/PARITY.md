@@ -20,6 +20,7 @@ channels and the chosen AI model, with local session state and tool execution:
 | Area | OpenClaw-shaped capability | Butterclaw status |
 | --- | --- | --- |
 | Local-first runtime | Own data and tool execution locally | Started: CLI runtime, local files, local memory |
+| First-run setup | Guided install and configuration | Started: interactive setup command |
 | Model agnostic | Switch providers and models | Started: mock, Ollama, OpenAI-compatible APIs |
 | Low-end hardware | Small context and minimal services | Started: no runtime deps, short prompts, budget caps |
 | Skills | Reusable workflows | Started: Markdown skill loading |

@@ -7,6 +7,7 @@ core powers with fewer moving pieces.
 ## Milestone 0: Tiny Useful Core
 
 - CLI agent loop
+- first-run setup/onboarding command
 - mock, Ollama, and OpenAI-compatible providers
 - workspace-confined file tools
 - optional shell tool

@@ -10,6 +10,7 @@ from butterclaw.agent import ButterclawAgent
 from butterclaw.budget import BudgetLimitExceeded
 from butterclaw.channels.telegram import TelegramChannel, TelegramError
 from butterclaw.config import ButterclawConfig, config_path, load_config, save_config
+from butterclaw.setup import run_setup
 from butterclaw.tools import build_default_registry
 
 
@@ -22,6 +23,9 @@ def main(argv: list[str] | None = None) -> int:
 
     config = load_config(Path(args.config) if args.config else None)
     apply_overrides(config, args)
+
+    if args.setup or is_setup_task(args.task):
+        return run_setup(config, Path(args.config) if args.config else config_path())
 
     if args.init_config:
         save_config(config, Path(args.config) if args.config else config_path())
@@ -51,6 +55,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument("task", nargs="*", help="Task for the agent. Omit for REPL mode.")
     parser.add_argument("--config", help="Path to config JSON.")
+    parser.add_argument("--setup", action="store_true", help="Run first-time interactive setup.")
     parser.add_argument("--init-config", action="store_true", help="Write a starter config.")
     parser.add_argument("--show-tools", action="store_true", help="Print available tools.")
     parser.add_argument("--version", action="store_true", help="Print version.")
@@ -77,6 +82,10 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--telegram-timeout", type=int, help="Long-poll timeout in seconds.")
     parser.add_argument("--telegram-idle-sleep", type=float, help="Sleep between empty polls in seconds.")
     return parser.parse_args(argv)
+
+
+def is_setup_task(task: list[str]) -> bool:
+    return len(task) == 1 and task[0].lower() in {"setup", "onboard", "onboarding"}
 
 
 def apply_overrides(config: ButterclawConfig, args: argparse.Namespace) -> None:

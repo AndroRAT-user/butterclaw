@@ -2,6 +2,7 @@ import childProcess from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { ButterclawConfig } from "./config.js";
+import { registerGoogleTools } from "./google.js";
 import { ensureParent, truncate } from "./util.js";
 
 export interface ToolResult {
@@ -226,6 +227,7 @@ export function buildDefaultRegistry(config: ButterclawConfig): ToolRegistry {
     }
   ];
   specs.forEach((spec) => registry.register(spec));
+  registerGoogleTools(registry, config);
   return registry;
 }
 

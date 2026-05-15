@@ -34,6 +34,8 @@ interface Args {
   telegramAllowedChat: string[];
   telegramTimeout?: number;
   telegramIdleSleep?: number;
+  googleTokenEnv?: string;
+  googleCalendarId?: string;
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
@@ -117,7 +119,9 @@ export function parseArgs(argv: string[]): Args {
     "--telegram-base-url": (value) => (args.telegramBaseUrl = value),
     "--telegram-allowed-chat": (value) => args.telegramAllowedChat.push(...splitCsv(value)),
     "--telegram-timeout": (value) => (args.telegramTimeout = Number(value)),
-    "--telegram-idle-sleep": (value) => (args.telegramIdleSleep = Number(value))
+    "--telegram-idle-sleep": (value) => (args.telegramIdleSleep = Number(value)),
+    "--google-token-env": (value) => (args.googleTokenEnv = value),
+    "--google-calendar-id": (value) => (args.googleCalendarId = value)
   };
   const flagOptions: Record<string, () => void> = {
     "--setup": () => (args.setup = true),
@@ -167,6 +171,8 @@ function applyOverrides(config: ButterclawConfig, args: Args): void {
   if (args.telegramAllowedChat.length) config.telegramAllowedChats = args.telegramAllowedChat;
   if (args.telegramTimeout !== undefined) config.telegramPollTimeoutSeconds = args.telegramTimeout;
   if (args.telegramIdleSleep !== undefined) config.telegramIdleSleepSeconds = args.telegramIdleSleep;
+  if (args.googleTokenEnv) config.googleTokenEnv = args.googleTokenEnv;
+  if (args.googleCalendarId) config.googleCalendarId = args.googleCalendarId;
 }
 
 async function runOnce(config: ButterclawConfig, task: string, agentProfile?: AgentProfile): Promise<number> {
@@ -328,6 +334,8 @@ Options:
   --telegram-allowed-chat <id>
   --telegram-timeout <seconds>
   --telegram-idle-sleep <seconds>
+  --google-token-env <name>
+  --google-calendar-id <id>
 
 Commands:
   butterclaw agent list

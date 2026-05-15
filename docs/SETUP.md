@@ -49,6 +49,18 @@ set TELEGRAM_BOT_TOKEN=123456:your-token
 butterclaw --telegram-poll
 ```
 
+## Google Workspace
+
+Set a Google OAuth access token before using Gmail or Calendar tools:
+
+```cmd
+set GOOGLE_ACCESS_TOKEN=your-google-oauth-access-token
+butterclaw "list my calendar events"
+```
+
+Use `--google-token-env` and `--google-calendar-id` to override the token
+environment variable or calendar ID.
+
 ## Agents And Skills
 
 After setup, create reusable agent profiles and skills:

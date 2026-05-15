@@ -27,6 +27,8 @@ export interface ButterclawConfig {
   telegramPollTimeoutSeconds: number;
   telegramIdleSleepSeconds: number;
   telegramMaxReplyChars: number;
+  googleTokenEnv: string;
+  googleCalendarId: string;
   agentsDir: string;
   skillsDir: string;
   memoryPath: string;
@@ -68,6 +70,8 @@ export function defaultConfig(overrides: Partial<ButterclawConfig> = {}): Butter
     telegramPollTimeoutSeconds: 25,
     telegramIdleSleepSeconds: 1,
     telegramMaxReplyChars: 3900,
+    googleTokenEnv: "GOOGLE_ACCESS_TOKEN",
+    googleCalendarId: "primary",
     agentsDir: path.join(configDir, "agents"),
     skillsDir: path.join(configDir, "skills"),
     memoryPath: path.join(configDir, "memory.jsonl"),

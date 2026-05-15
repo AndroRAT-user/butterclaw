@@ -10,6 +10,7 @@ powers with fewer moving pieces.
 - first-run setup/onboarding command
 - mock, Ollama, and OpenAI-compatible providers
 - saved agent profiles
+- Gmail and Google Calendar tools
 - workspace-confined file tools
 - optional shell tool
 - bounded sub-agents for focused delegated tasks

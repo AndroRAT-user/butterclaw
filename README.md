@@ -58,6 +58,7 @@ Create and use an agent:
 
 ```cmd
 butterclaw agent create debugger --description "Finds bugs" --instructions "Find root causes first. Reproduce before fixing."
+butterclaw agent run debugger "inspect this workspace"
 butterclaw --agent debugger "inspect this workspace"
 ```
 
@@ -284,16 +285,20 @@ roles like `debugger`, `reviewer`, `builder`, or `researcher`.
 butterclaw agent list
 butterclaw agent show debugger
 butterclaw agent create reviewer --description "Reviews code" --instructions "Find bugs, missing tests, and risky behavior first."
+butterclaw agent run reviewer "review the current project"
 butterclaw --agent reviewer "review the current project"
 ```
 
 Teams are saved JSON profiles that point at multiple agents. The main agent can
 call them through `delegate_team`, and each member runs as a bounded sub-agent.
+Use `team run` when you want the team report printed directly without relying on
+the main model to summarize it.
 
 ```cmd
 butterclaw team list
 butterclaw team show review-crew
 butterclaw team create review-crew --agents debugger,reviewer --description "Debug and review together"
+butterclaw team run review-crew "inspect this project"
 ```
 
 Sessions save exact user/assistant turns locally so one-off commands can resume
@@ -341,7 +346,8 @@ The map tool gives the model a compact project outline. `delegate_task` starts
 one bounded sub-agent with the same workspace tools, while `delegate_team` runs
 several saved agent profiles on the same task and combines their reports.
 Sub-agents do not get their own delegation tool, so delegation stays simple and
-finite.
+finite. Butterclaw keeps delegated reports visible in the final answer so agent
+work does not disappear behind a vague summary.
 
 Local slash commands such as `/status`, `/tools`, `/tool-policy`, `/new`,
 `/doctor`, `/backup`, `/github`, and `/whatsapp` are handled by the CLI itself

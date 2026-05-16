@@ -5,7 +5,17 @@ import path from "node:path";
 import test from "node:test";
 import { ButterclawAgent } from "../src/agent.js";
 import { AgentProfile, AgentStore } from "../src/agents.js";
-import { runAgentCommand, runBackupCommand, runDoctorCommand, runSessionCommand, runSkillCommand, runSlashCommand, runTeamCommand } from "../src/cli.js";
+import {
+  runAgentCommand,
+  runAgentRunCommand,
+  runBackupCommand,
+  runDoctorCommand,
+  runSessionCommand,
+  runSkillCommand,
+  runSlashCommand,
+  runTeamCommand,
+  runTeamRunCommand
+} from "../src/cli.js";
 import { defaultConfig } from "../src/config.js";
 import { Message, Provider, ProviderResponse } from "../src/providers.js";
 import { SessionStore } from "../src/sessions.js";
@@ -57,6 +67,20 @@ test("agent command creates and lists profiles", () => {
   assert.match(lines.join("\n"), /debugger: Finds bugs/);
 });
 
+test("agent run command executes a saved profile and prints an answer", async () => {
+  const config = tempConfig();
+  const lines: string[] = [];
+  new AgentStore(config.agentsDir).create({
+    name: "debugger",
+    description: "Finds bugs",
+    instructions: "Find root causes first."
+  });
+
+  assert.equal(await runAgentRunCommand(config, ["run", "debugger", "hello from this agent"], (line) => lines.push(line)), 0);
+
+  assert.match(lines.join("\n"), /Butterclaw mock provider/);
+});
+
 test("skill command creates and shows markdown skills", () => {
   const config = tempConfig();
   const lines: string[] = [];
@@ -96,6 +120,22 @@ test("team command creates and lists agent teams", () => {
   lines.length = 0;
   assert.equal(runTeamCommand(config, ["list"], (line) => lines.push(line)), 0);
   assert.match(lines.join("\n"), /review-crew: debugger, writer/);
+});
+
+test("team run command returns the team report directly", async () => {
+  const config = tempConfig();
+  const lines: string[] = [];
+  const agents = new AgentStore(config.agentsDir);
+  agents.create({ name: "scout", description: "Lists files", instructions: "List files." });
+  agents.create({ name: "reviewer", description: "Reviews files", instructions: "Review files." });
+  new TeamStore(config.teamsDir).create({ name: "triage", agents: ["scout", "reviewer"], description: "Triage team" });
+
+  assert.equal(await runTeamRunCommand(config, ["triage", "list the files in this workspace"], (line) => lines.push(line)), 0);
+
+  assert.match(lines.join("\n"), /Team triage finished successfully/);
+  assert.match(lines.join("\n"), /## scout/);
+  assert.match(lines.join("\n"), /## reviewer/);
+  assert.doesNotMatch(lines.join("\n"), /Unknown tool: delegate_task/);
 });
 
 test("session command shows and clears saved transcripts", () => {

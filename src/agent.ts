@@ -60,20 +60,25 @@ export class ButterclawAgent {
 
   async run(userInput: string): Promise<AgentRun> {
     let messages = this.buildMessages(userInput);
+    let lastDelegationOutput: string | null = null;
     for (let step = 1; step <= this.config.maxSteps; step += 1) {
       const response = await this.provider.complete(messages);
       this.usage.record(response);
       const toolCall = parseToolCall(response.content);
       if (!toolCall) {
-        this.finishRun(userInput, response.content);
-        return { answer: response.content, steps: step, usage: this.usage.current() };
+        const answer = withDelegationReport(response.content, lastDelegationOutput);
+        this.finishRun(userInput, answer);
+        return { answer, steps: step, usage: this.usage.current() };
       }
 
       const result = await this.registry.call(toolCall.tool, toolCall.args ?? {});
+      if (toolCall.tool === "delegate_task" || toolCall.tool === "delegate_team") {
+        lastDelegationOutput = `${result.ok ? "" : "ERROR: "}${result.output}`;
+      }
       messages.push({ role: "assistant", content: response.content });
       messages.push({
         role: "user",
-        content: `Tool result for ${toolCall.tool}:\n${result.ok ? "OK" : "ERROR"}: ${result.output}\n\nContinue. If the task is complete, answer in plain text.`
+        content: `Tool result for ${toolCall.tool}:\n${result.ok ? "OK" : "ERROR"}: ${result.output}\n\nContinue. If this was a delegate_task or delegate_team result, include the agent report in your final answer. If the task is complete, answer in plain text.`
       });
       messages = trimMessages(messages, this.config.maxContextChars);
     }
@@ -144,8 +149,11 @@ export class ButterclawAgent {
     }
 
     const role = truncate(String(args.role ?? "worker").trim() || "worker", 80);
-    const profileName = String(args.agent ?? "").trim();
-    const profile = profileName ? new AgentStore(this.config.agentsDir).get(profileName) : null;
+    const store = new AgentStore(this.config.agentsDir);
+    const explicitProfileName = String(args.agent ?? "").trim();
+    const inferredProfile = explicitProfileName ? null : store.get(role);
+    const profileName = explicitProfileName || inferredProfile?.name || "";
+    const profile = explicitProfileName ? store.get(explicitProfileName) : inferredProfile;
     if (profileName && !profile) {
       return { ok: false, output: `Unknown agent: ${profileName}` };
     }
@@ -156,8 +164,9 @@ export class ButterclawAgent {
       applyAgentProfile(workerConfig, profile);
     }
     workerConfig.maxSteps = maxSteps;
+    const useProfileProvider = Boolean(profile?.provider || profile?.model || profile?.baseUrl !== undefined);
     const worker = new ButterclawAgent(workerConfig, {
-      provider: this.provider,
+      ...(useProfileProvider ? {} : { provider: this.provider }),
       registry: buildDefaultRegistry(workerConfig),
       memory: this.memory,
       usage: this.usage,
@@ -329,5 +338,23 @@ export function trimMessages(messages: Message[], maxChars: number): Message[] {
     running += message.content.length;
   }
   return trimmed;
+}
+
+function withDelegationReport(answer: string, delegationOutput: string | null): string {
+  const trimmedAnswer = answer.trim();
+  if (!delegationOutput) {
+    return trimmedAnswer || answer;
+  }
+  if (!trimmedAnswer) {
+    return delegationOutput;
+  }
+  const firstReportLine = delegationOutput.split(/\r?\n/).find((line) => line.trim())?.trim() ?? "";
+  if (firstReportLine && trimmedAnswer.includes(firstReportLine)) {
+    return trimmedAnswer;
+  }
+  if (/\b(Sub-agent|Team)\b/.test(trimmedAnswer)) {
+    return trimmedAnswer;
+  }
+  return `${trimmedAnswer}\n\nAgent report:\n${delegationOutput}`;
 }
 

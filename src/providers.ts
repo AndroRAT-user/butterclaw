@@ -43,11 +43,26 @@ export function buildProvider(config: ButterclawConfig): Provider {
 
 export class MockProvider implements Provider {
   async complete(messages: Message[]): Promise<ProviderResponse> {
-    const last = messages[messages.length - 1]?.content.toLowerCase() ?? "";
+    const lastMessage = messages[messages.length - 1]?.content ?? "";
+    const last = lastMessage.toLowerCase();
+    const systemPrompt = messages.find((message) => message.role === "system")?.content ?? "";
+    const canDelegate = systemPrompt.includes("- delegate_task:");
     if (last.includes("tool result for")) {
-      return { content: "I checked the workspace and finished the requested step." };
+      return { content: mockToolResultAnswer(lastMessage) };
     }
-    if ((last.includes("delegate") || last.includes("sub-agent") || last.includes("sub agent")) && last.includes("list")) {
+    const requestedAgent = last.match(/\bask\s+([a-z0-9_.-]+)\b/);
+    if (canDelegate && requestedAgent && last.includes("list")) {
+      return {
+        content: JSON.stringify({
+          tool: "delegate_task",
+          args: {
+            role: requestedAgent[1],
+            task: "list the files in this workspace"
+          }
+        })
+      };
+    }
+    if (canDelegate && (last.includes("delegate") || last.includes("sub-agent") || last.includes("sub agent")) && last.includes("list")) {
       return { content: '{"tool":"delegate_task","args":{"role":"scout","task":"list the files in this workspace"}}' };
     }
     if (last.includes("list") && (last.includes("file") || last.includes("workspace"))) {
@@ -112,6 +127,13 @@ export class OllamaProvider implements Provider {
     );
     return { content: String(raw?.message?.content ?? ""), raw };
   }
+}
+
+function mockToolResultAnswer(message: string): string {
+  const result = message.match(/^Tool result for [^\n:]+:\r?\n(?:OK|ERROR): ([\s\S]*?)\r?\n\r?\nContinue\./i);
+  const output = result?.[1]?.trim();
+  const intro = "I checked the workspace and finished the requested step.";
+  return output ? `${intro}\n\n${output}` : intro;
 }
 
 function optionalHeader(name: string, value: string | undefined): Record<string, string> {

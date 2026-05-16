@@ -83,9 +83,15 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   applyOverrides(config, args);
   const command = args.task[0]?.toLowerCase();
   if (command === "agent" || command === "agents") {
+    if (isAgentRunCommand(args.task.slice(1))) {
+      return handleAsyncCommand(() => runAgentRunCommand(config, args.task.slice(1)));
+    }
     return handleCommand(() => runAgentCommand(config, args.task.slice(1)));
   }
   if (command === "team" || command === "teams") {
+    if (isTeamRunCommand(args.task.slice(1))) {
+      return handleAsyncCommand(() => runTeamRunCommand(config, args.task.slice(1)));
+    }
     return handleCommand(() => runTeamCommand(config, args.task.slice(1)));
   }
   if (command === "skill" || command === "skills") {
@@ -464,7 +470,23 @@ export function runAgentCommand(config: ButterclawConfig, argv: string[], output
     outputFunc(successLine(`Created agent ${agent.name} in ${config.agentsDir}`));
     return 0;
   }
-  throw new Error("Usage: butterclaw agent list | show <name> | create <name> [--description text] [--instructions text] [--model name] [--provider name] [--force]");
+  throw new Error("Usage: butterclaw agent list | show <name> | create <name> [--description text] [--instructions text] [--model name] [--provider name] [--force] | run <name> <task...>");
+}
+
+export async function runAgentRunCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): Promise<number> {
+  const parsed = parseRunTarget(argv);
+  if (!parsed.name || !parsed.task) {
+    throw new Error("Usage: butterclaw agent run <name> <task...>");
+  }
+  const profile = new AgentStore(config.agentsDir).get(parsed.name);
+  if (!profile) {
+    throw new Error(`Unknown agent: ${parsed.name}`);
+  }
+  const agentConfig = { ...config };
+  applyAgentProfile(agentConfig, profile);
+  const result = await new ButterclawAgent(agentConfig, { agentProfile: profile }).run(parsed.task);
+  outputFunc(result.answer);
+  return 0;
 }
 
 export function runTeamCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): number {
@@ -502,7 +524,22 @@ export function runTeamCommand(config: ButterclawConfig, argv: string[], outputF
     outputFunc(successLine(`Created team ${team.name} in ${config.teamsDir}`));
     return 0;
   }
-  throw new Error("Usage: butterclaw team list | show <name> | create <name> --agents <agent1,agent2> [--description text] [--instructions text] [--force]");
+  throw new Error("Usage: butterclaw team list | show <name> | create <name> --agents <agent1,agent2> [--description text] [--instructions text] [--force] | run <name> <task...>");
+}
+
+export async function runTeamRunCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): Promise<number> {
+  const parsed = parseRunTarget(argv);
+  if (!parsed.name || !parsed.task) {
+    throw new Error("Usage: butterclaw team run <name> <task...>");
+  }
+  const team = new TeamStore(config.teamsDir).get(parsed.name);
+  if (!team) {
+    throw new Error(`Unknown team: ${parsed.name}`);
+  }
+  const agent = new ButterclawAgent(config);
+  const result = await agent.registry.call("delegate_team", { team: team.name, task: parsed.task });
+  outputFunc(result.output);
+  return result.ok ? 0 : 1;
 }
 
 export function runSkillCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): number {
@@ -714,6 +751,24 @@ function parseCommandOptions(argv: string[]): { positionals: string[]; values: R
     values[key] = argv[index] ?? "";
   }
   return { positionals, values, flags };
+}
+
+function isAgentRunCommand(argv: string[]): boolean {
+  const command = argv[0]?.toLowerCase();
+  return Boolean(command && command !== "list" && command !== "show" && command !== "create");
+}
+
+function isTeamRunCommand(argv: string[]): boolean {
+  const command = argv[0]?.toLowerCase();
+  return Boolean(command && command !== "list" && command !== "show" && command !== "create");
+}
+
+function parseRunTarget(argv: string[]): { name: string; task: string } {
+  const [first = "", second = "", ...rest] = argv;
+  if (first.toLowerCase() === "run" || first.toLowerCase() === "ask") {
+    return { name: second, task: rest.join(" ").trim() };
+  }
+  return { name: first, task: [second, ...rest].join(" ").trim() };
 }
 
 function printHelp(): void {

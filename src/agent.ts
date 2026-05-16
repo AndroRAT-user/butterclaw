@@ -5,6 +5,7 @@ import { buildProvider, Message, Provider } from "./providers.js";
 import { SessionStore } from "./sessions.js";
 import { SkillLoader } from "./skills.js";
 import { TeamStore } from "./teams.js";
+import { isToolEnabled } from "./tool-policy.js";
 import { buildDefaultRegistry, ToolRegistry, ToolResult } from "./tools.js";
 import { UsageTracker } from "./usage.js";
 import { isRecord, truncate } from "./util.js";
@@ -107,29 +108,33 @@ export class ButterclawAgent {
   }
 
   private registerDelegationTool(): void {
-    this.registry.register({
-      name: "delegate_task",
-      description: "Ask a focused sub-agent to work on a bounded task and report back",
-      args: {
-        task: "focused task for the sub-agent",
-        agent: "optional named agent profile to use",
-        role: "optional short role name, default worker",
-        maxSteps: "optional worker step limit, capped below the main agent limit",
-        maxOutputChars: "optional output limit"
-      },
-      handler: (args) => this.delegateTask(args)
-    });
-    this.registry.register({
-      name: "delegate_team",
-      description: "Ask a saved team of named agents to work on one bounded task and combine their reports",
-      args: {
-        team: "saved team name",
-        task: "focused task for the team",
-        maxSteps: "optional worker step limit for each team member",
-        maxOutputChars: "optional combined output limit"
-      },
-      handler: (args) => this.delegateTeam(args)
-    });
+    if (isToolEnabled("delegate_task", this.config)) {
+      this.registry.register({
+        name: "delegate_task",
+        description: "Ask a focused sub-agent to work on a bounded task and report back",
+        args: {
+          task: "focused task for the sub-agent",
+          agent: "optional named agent profile to use",
+          role: "optional short role name, default worker",
+          maxSteps: "optional worker step limit, capped below the main agent limit",
+          maxOutputChars: "optional output limit"
+        },
+        handler: (args) => this.delegateTask(args)
+      });
+    }
+    if (isToolEnabled("delegate_team", this.config)) {
+      this.registry.register({
+        name: "delegate_team",
+        description: "Ask a saved team of named agents to work on one bounded task and combine their reports",
+        args: {
+          team: "saved team name",
+          task: "focused task for the team",
+          maxSteps: "optional worker step limit for each team member",
+          maxOutputChars: "optional combined output limit"
+        },
+        handler: (args) => this.delegateTeam(args)
+      });
+    }
   }
 
   private async delegateTask(args: Record<string, unknown>): Promise<ToolResult> {
@@ -218,6 +223,7 @@ export class ButterclawAgent {
     if (this.recordSession && this.sessionName && this.sessionStore) {
       this.sessionStore.append(this.sessionName, "user", userInput);
       this.sessionStore.append(this.sessionName, "assistant", answer);
+      this.sessionStore.prune(this.sessionName, this.config.sessionMaxTurns);
     }
   }
 

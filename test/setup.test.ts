@@ -21,6 +21,14 @@ test("cli parser reads flags and task text", () => {
     "debugger",
     "--session",
     "long-build",
+    "--session-max-turns",
+    "40",
+    "--tool-profile",
+    "coding",
+    "--allow-tool",
+    "read_file,workspace_map",
+    "--deny-tool",
+    "run_shell",
     "--allow-shell",
     "--telegram-allowed-chat",
     "123,456",
@@ -36,6 +44,10 @@ test("cli parser reads flags and task text", () => {
   assert.equal(args.provider, "ollama");
   assert.equal(args.agent, "debugger");
   assert.equal(args.session, "long-build");
+  assert.equal(args.sessionMaxTurns, 40);
+  assert.equal(args.toolProfile, "coding");
+  assert.deepEqual(args.toolAllow, ["read_file", "workspace_map"]);
+  assert.deepEqual(args.toolDeny, ["run_shell"]);
   assert.equal(args.allowShell, true);
   assert.deepEqual(args.telegramAllowedChat, ["123", "456"]);
   assert.equal(args.googleClientIdEnv, "GOOGLE_CLIENT");

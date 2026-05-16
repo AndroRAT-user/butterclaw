@@ -18,11 +18,14 @@ Telegram channel without requiring a large service stack.
 - saved agent profiles with custom instructions
 - saved agent teams that can delegate one task to several specialists
 - resumable named sessions with local transcripts
+- automatic named-session pruning with a configurable turn cap
 - Gmail and Google Calendar tools using Google OAuth
 - Telegram long-polling channel for phone/chat access
 - local file tools: list, read, write, search, and workspace mapping
+- OpenClaw-inspired tool profiles, allow rules, and deny rules
 - optional shell tool with timeout and workspace guard
 - bounded sub-agents for delegated worker tasks
+- local slash commands for status, tools, policy, reset, doctor, and backup
 - JSONL local memory with simple relevance search
 - Markdown skill loading from a local skills folder
 - local usage tracking
@@ -68,6 +71,7 @@ Resume a named working session:
 ```cmd
 butterclaw --session butter-build "remember the current goal and inspect the workspace"
 butterclaw --session butter-build "continue from where we left off"
+butterclaw session prune butter-build 80
 ```
 
 Check and back up local state:
@@ -75,6 +79,15 @@ Check and back up local state:
 ```cmd
 butterclaw doctor
 butterclaw backup create
+```
+
+Inspect the runtime without sending anything to the model:
+
+```cmd
+butterclaw /status
+butterclaw /tools
+butterclaw /tool-policy
+butterclaw --session butter-build /new
 ```
 
 Create a skill:
@@ -109,6 +122,29 @@ Enable shell commands only when you actually need them:
 ```cmd
 butterclaw --allow-shell "run the tests and tell me what failed"
 ```
+
+## Tool Policy
+
+Butterclaw uses an OpenClaw-style tool policy layer. Profiles choose a default
+tool surface, `--allow-tool` can replace that default, and `--deny-tool` always
+wins.
+
+```cmd
+butterclaw --tool-profile minimal /tools
+butterclaw --tool-profile coding --deny-tool run_shell "inspect this repo"
+butterclaw --allow-tool read_file,workspace_map "summarize this workspace"
+```
+
+Profiles:
+
+- `minimal`: read-only workspace discovery
+- `coding`: workspace tools, shell tool registration, and sub-agents
+- `google`: read-only workspace discovery, Google tools, and sub-agents
+- `full`: everything Butterclaw knows how to register
+
+Groups accepted by `--allow-tool` and `--deny-tool`: `group:read`,
+`group:write`, `group:fs`, `group:runtime`, `group:google`, `group:agents`,
+and `group:all`. Wildcards like `gmail_*` are also supported.
 
 ## Telegram
 
@@ -200,6 +236,7 @@ butterclaw --session release-work "check what is left for release"
 butterclaw session list
 butterclaw session show release-work
 butterclaw session clear release-work
+butterclaw session prune release-work 80
 ```
 
 Backups are local JSON files that include agents, teams, skills, sessions, and
@@ -237,6 +274,10 @@ one bounded sub-agent with the same workspace tools, while `delegate_team` runs
 several saved agent profiles on the same task and combines their reports.
 Sub-agents do not get their own delegation tool, so delegation stays simple and
 finite.
+
+Local slash commands such as `/status`, `/tools`, `/tool-policy`, `/new`,
+`/doctor`, and `/backup` are handled by the CLI itself and are never sent to the
+model.
 
 ## Development
 

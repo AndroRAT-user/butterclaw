@@ -5,6 +5,7 @@ import { readJsonFile, writeJsonFile } from "./util.js";
 
 export type ProviderName = "mock" | "ollama" | "openai-compatible";
 export type ShellMode = "deny" | "allow";
+export type ToolProfile = "minimal" | "coding" | "google" | "full";
 
 export interface ButterclawConfig {
   provider: ProviderName;
@@ -15,9 +16,13 @@ export interface ButterclawConfig {
   configDir: string;
   maxSteps: number;
   maxContextChars: number;
+  sessionMaxTurns: number;
   maxSkillChars: number;
   memoryItems: number;
   shellMode: ShellMode;
+  toolProfile: ToolProfile;
+  toolAllow: string[];
+  toolDeny: string[];
   allowOutsideWorkspace: boolean;
   requestTimeoutSeconds: number;
   shellTimeoutSeconds: number;
@@ -62,9 +67,13 @@ export function defaultConfig(overrides: Partial<ButterclawConfig> = {}): Butter
     configDir,
     maxSteps: 6,
     maxContextChars: 12_000,
+    sessionMaxTurns: 200,
     maxSkillChars: 4_000,
     memoryItems: 5,
     shellMode: "deny",
+    toolProfile: "full",
+    toolAllow: [],
+    toolDeny: [],
     allowOutsideWorkspace: false,
     requestTimeoutSeconds: 60,
     shellTimeoutSeconds: 20,
@@ -94,6 +103,10 @@ export function normalizeConfig(config: ButterclawConfig): ButterclawConfig {
     ...config,
     workspace: path.resolve(config.workspace),
     configDir,
+    toolProfile: config.toolProfile ?? "full",
+    toolAllow: (config.toolAllow ?? []).map(String),
+    toolDeny: (config.toolDeny ?? []).map(String),
+    sessionMaxTurns: Number.isFinite(config.sessionMaxTurns) ? Math.max(0, Math.trunc(config.sessionMaxTurns)) : 200,
     telegramAllowedChats: config.telegramAllowedChats.map(String),
     agentsDir: path.resolve(config.agentsDir || path.join(configDir, "agents")),
     teamsDir: path.resolve(config.teamsDir || path.join(configDir, "teams")),

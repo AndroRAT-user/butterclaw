@@ -82,6 +82,10 @@ export function renderHelp(version: string): string {
     "  --workspace <path>",
     "  --max-steps <number>",
     "  --max-context-chars <number>",
+    "  --session-max-turns <number>",
+    "  --tool-profile <minimal|coding|google|full>",
+    "  --allow-tool <name|group>",
+    "  --deny-tool <name|group>",
     "  --allow-shell",
     "  --allow-outside-workspace",
     "  --telegram-poll",
@@ -104,11 +108,15 @@ export function renderHelp(version: string): string {
     "  butterclaw skill create <name> --description <text> --body <text>",
     "  butterclaw session list",
     "  butterclaw session show <name>",
+    "  butterclaw session prune <name> [maxTurns]",
     "  butterclaw doctor",
     "  butterclaw backup create [path]",
     "  butterclaw google login",
     "  butterclaw google status",
-    "  butterclaw google logout"
+    "  butterclaw google logout",
+    "",
+    "Local slash commands:",
+    "  /status  /tools  /tool-policy  /new  /doctor  /backup"
   ]);
 }
 

@@ -48,3 +48,27 @@ test("workspace map summarizes project shape", async () => {
   assert.match(result.output, /\.ts: 2/);
 });
 
+test("tool profiles restrict the registered tool surface", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "butterclaw-tools-"));
+  const registry = buildDefaultRegistry(defaultConfig({ workspace: root, configDir: path.join(root, ".config"), toolProfile: "minimal" }));
+
+  assert.deepEqual(registry.names(), ["list_dir", "read_file", "search_files", "workspace_map"]);
+  assert.equal((await registry.call("read_file", { path: "missing.txt" })).ok, false);
+  assert.match((await registry.call("write_file", { path: "notes.txt", content: "nope" })).output, /Unknown tool/);
+});
+
+test("explicit tool allow and deny rules override profiles with deny winning", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "butterclaw-tools-"));
+  const allowRegistry = buildDefaultRegistry(
+    defaultConfig({ workspace: root, configDir: path.join(root, ".config"), toolAllow: ["read_file", "workspace_map"] })
+  );
+  assert.deepEqual(allowRegistry.names(), ["read_file", "workspace_map"]);
+
+  const denyRegistry = buildDefaultRegistry(
+    defaultConfig({ workspace: root, configDir: path.join(root, ".config"), toolProfile: "full", toolDeny: ["write_file", "gmail_*"] })
+  );
+  assert.equal(denyRegistry.names().includes("write_file"), false);
+  assert.equal(denyRegistry.names().some((name) => name.startsWith("gmail_")), false);
+  assert.equal(denyRegistry.names().includes("calendar_list_events"), true);
+});
+

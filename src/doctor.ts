@@ -2,6 +2,7 @@ import childProcess from "node:child_process";
 import fs from "node:fs";
 import { ButterclawConfig } from "./config.js";
 import { googleStatus } from "./google.js";
+import { enabledToolNames } from "./tool-policy.js";
 import { trimTrailingSlash } from "./util.js";
 
 export interface DoctorCheck {
@@ -26,6 +27,11 @@ export async function doctorChecks(config: ButterclawConfig): Promise<DoctorChec
       label: "Shell tool",
       ok: config.shellMode === "deny",
       detail: config.shellMode === "deny" ? "disabled by default" : "enabled"
+    },
+    {
+      label: "Tool policy",
+      ok: enabledToolNames(config).length > 0,
+      detail: `${config.toolProfile} profile, ${enabledToolNames(config).length} tool(s) enabled`
     },
     providerCheck(config),
     {

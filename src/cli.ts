@@ -12,6 +12,7 @@ import { SessionStore } from "./sessions.js";
 import { runSetup } from "./setup.js";
 import { SkillLoader } from "./skills.js";
 import { TeamStore } from "./teams.js";
+import { toolPolicySummary } from "./tool-policy.js";
 import { button, panel, renderCollection, renderHelp, statusPill, successLine } from "./ui.js";
 import { splitCsv } from "./util.js";
 
@@ -32,6 +33,10 @@ interface Args {
   workspace?: string;
   maxSteps?: number;
   maxContextChars?: number;
+  sessionMaxTurns?: number;
+  toolProfile?: ButterclawConfig["toolProfile"];
+  toolAllow: string[];
+  toolDeny: string[];
   allowShell: boolean;
   allowOutsideWorkspace: boolean;
   telegramPoll: boolean;
@@ -121,6 +126,8 @@ export function parseArgs(argv: string[]): Args {
     showTools: false,
     version: false,
     help: false,
+    toolAllow: [],
+    toolDeny: [],
     allowShell: false,
     allowOutsideWorkspace: false,
     telegramPoll: false,
@@ -139,6 +146,12 @@ export function parseArgs(argv: string[]): Args {
     "--workspace": (value) => (args.workspace = value),
     "--max-steps": (value) => (args.maxSteps = Number(value)),
     "--max-context-chars": (value) => (args.maxContextChars = Number(value)),
+    "--session-max-turns": (value) => (args.sessionMaxTurns = Number(value)),
+    "--tool-profile": (value) => (args.toolProfile = value as ButterclawConfig["toolProfile"]),
+    "--allow-tool": (value) => args.toolAllow.push(...splitCsv(value)),
+    "--tool-allow": (value) => args.toolAllow.push(...splitCsv(value)),
+    "--deny-tool": (value) => args.toolDeny.push(...splitCsv(value)),
+    "--tool-deny": (value) => args.toolDeny.push(...splitCsv(value)),
     "--telegram-token-env": (value) => (args.telegramTokenEnv = value),
     "--telegram-base-url": (value) => (args.telegramBaseUrl = value),
     "--telegram-allowed-chat": (value) => args.telegramAllowedChat.push(...splitCsv(value)),
@@ -189,6 +202,10 @@ function applyOverrides(config: ButterclawConfig, args: Args): void {
   if (args.workspace) config.workspace = args.workspace;
   if (args.maxSteps !== undefined) config.maxSteps = args.maxSteps;
   if (args.maxContextChars !== undefined) config.maxContextChars = args.maxContextChars;
+  if (args.sessionMaxTurns !== undefined) config.sessionMaxTurns = args.sessionMaxTurns;
+  if (args.toolProfile) config.toolProfile = args.toolProfile;
+  if (args.toolAllow.length) config.toolAllow = [...config.toolAllow, ...args.toolAllow];
+  if (args.toolDeny.length) config.toolDeny = [...config.toolDeny, ...args.toolDeny];
   if (args.allowShell) config.shellMode = "allow";
   if (args.allowOutsideWorkspace) config.allowOutsideWorkspace = true;
   if (args.telegramTokenEnv) config.telegramTokenEnv = args.telegramTokenEnv;
@@ -203,10 +220,14 @@ function applyOverrides(config: ButterclawConfig, args: Args): void {
 
 async function runOnce(config: ButterclawConfig, task: string, agentProfile?: AgentProfile, sessionName?: string): Promise<number> {
   try {
-    const result = await new ButterclawAgent(config, {
+    const agent = new ButterclawAgent(config, {
       ...(agentProfile ? { agentProfile } : {}),
       ...(sessionName ? { sessionName } : {})
-    }).run(task);
+    });
+    if (await runSlashCommand(config, task, { agent, agentProfile, sessionName })) {
+      return 0;
+    }
+    const result = await agent.run(task);
     console.log(result.answer);
     return 0;
   } catch (error) {
@@ -238,12 +259,90 @@ async function repl(config: ButterclawConfig, agentProfile?: AgentProfile, sessi
       const task = (await rl.question("> ")).trim();
       if (!task) continue;
       if (task === "exit" || task === "quit") return 0;
+      if (await runSlashCommand(config, task, { agent, agentProfile, sessionName })) continue;
       const result = await agent.run(task);
       console.log(result.answer);
     }
   } finally {
     rl.close();
   }
+}
+
+export async function runSlashCommand(
+  config: ButterclawConfig,
+  rawInput: string,
+  context: { agent: ButterclawAgent; agentProfile?: AgentProfile; sessionName?: string; outputFunc?: (line: string) => void }
+): Promise<boolean> {
+  const input = rawInput.trim();
+  if (!input.startsWith("/")) {
+    return false;
+  }
+  const outputFunc = context.outputFunc ?? console.log;
+  const [token = ""] = input.split(/\s+/, 1);
+  const command = token.slice(1).toLowerCase();
+  const rest = input.slice(token.length).trim();
+
+  if (command === "help" || command === "?") {
+    outputFunc(
+      panel("Slash Commands", [
+        `${button("/status")} runtime, workspace, session, and tool profile`,
+        `${button("/tools")} list the active tool surface`,
+        `${button("/tool-policy")} show profile, allow, and deny rules`,
+        `${button("/new")} clear the current named session`,
+        `${button("/reset")} same as /new`,
+        `${button("/doctor")} run local diagnostics`,
+        `${button("/backup")} save local agents, teams, skills, sessions, and memory`
+      ])
+    );
+    return true;
+  }
+
+  if (command === "status") {
+    outputFunc(
+      panel("Butterclaw Status", [
+        `Provider: ${config.provider} ${config.model}`,
+        `Workspace: ${config.workspace}`,
+        `Agent: ${context.agentProfile?.name ?? "default"}`,
+        `Session: ${context.sessionName ?? "(none)"}`,
+        `Tool profile: ${config.toolProfile}`,
+        `Tools: ${context.agent.registry.names().join(", ") || "none"}`
+      ])
+    );
+    return true;
+  }
+
+  if (command === "tools") {
+    outputFunc(context.agent.registry.describe() || "No tools enabled.");
+    return true;
+  }
+
+  if (command === "tool-policy" || command === "policy") {
+    outputFunc(panel("Tool Policy", toolPolicySummary(config).split("\n")));
+    return true;
+  }
+
+  if (command === "new" || command === "reset") {
+    if (!context.sessionName) {
+      outputFunc("No named session is active. Start one with --session <name>.");
+      return true;
+    }
+    const cleared = new SessionStore(config.sessionsDir).clear(context.sessionName);
+    outputFunc(cleared ? successLine(`Cleared session ${context.sessionName}`) : successLine(`Started fresh session ${context.sessionName}`));
+    return true;
+  }
+
+  if (command === "doctor" || command === "check") {
+    await runDoctorCommand(config, outputFunc);
+    return true;
+  }
+
+  if (command === "backup" || command === "export") {
+    runBackupCommand(config, rest ? ["create", rest] : ["create"], outputFunc);
+    return true;
+  }
+
+  outputFunc(`Unknown slash command: /${command || ""}. Try /help.`);
+  return true;
 }
 
 export function runAgentCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): number {
@@ -380,7 +479,14 @@ export function runSessionCommand(config: ButterclawConfig, argv: string[], outp
     outputFunc(cleared ? successLine(`Cleared session ${name}`) : `No session found: ${name}`);
     return 0;
   }
-  throw new Error("Usage: butterclaw session list | show <name> | clear <name>");
+  if (command === "prune") {
+    const name = argv[1] ?? "";
+    const maxTurns = argv[2] ? Number(argv[2]) : config.sessionMaxTurns;
+    const removed = store.prune(name, maxTurns);
+    outputFunc(successLine(`Pruned ${removed} old turn(s) from ${name}`));
+    return 0;
+  }
+  throw new Error("Usage: butterclaw session list | show <name> | clear <name> | prune <name> [maxTurns]");
 }
 
 export async function runDoctorCommand(config: ButterclawConfig, outputFunc = console.log): Promise<number> {

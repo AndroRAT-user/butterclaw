@@ -15,8 +15,11 @@ powers with fewer moving pieces.
 - saved agent profiles
 - saved agent teams
 - resumable named sessions
+- named-session pruning
 - Gmail and Google Calendar tools
 - workspace-confined file tools and workspace mapping
+- tool profiles with allow and deny rules
+- local slash commands
 - optional shell tool
 - bounded sub-agents for focused delegated tasks
 - JSONL memory
@@ -29,7 +32,7 @@ powers with fewer moving pieces.
 
 - streaming output
 - richer planning traces
-- per-tool permissions
+- per-skill permission declarations
 - skill metadata with required permissions
 - prompt compaction for smaller-context models
 - model profiles for low-RAM local models

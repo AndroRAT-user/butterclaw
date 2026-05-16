@@ -5,4 +5,5 @@ export { defaultConfig, loadConfig, saveConfig, type ButterclawConfig } from "./
 export { doctorChecks, type DoctorCheck } from "./doctor.js";
 export { SessionStore, type SessionSummary, type SessionTurn } from "./sessions.js";
 export { TeamStore, type TeamProfile } from "./teams.js";
+export { enabledToolNames, isToolEnabled, knownToolGroups, toolPolicySummary } from "./tool-policy.js";
 

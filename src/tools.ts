@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ButterclawConfig } from "./config.js";
 import { registerGoogleTools } from "./google.js";
+import { isToolEnabled } from "./tool-policy.js";
 import { ensureParent, isRecord, truncate } from "./util.js";
 
 export interface ToolResult {
@@ -12,7 +13,7 @@ export interface ToolResult {
 
 type ToolHandler = (args: Record<string, unknown>) => ToolResult | Promise<ToolResult>;
 
-interface ToolSpec {
+export interface ToolSpec {
   name: string;
   description: string;
   args: Record<string, string>;
@@ -47,6 +48,10 @@ export class ToolRegistry {
         return `- ${spec.name}: ${spec.description}. Args: ${argDocs || "none"}`;
       })
       .join("\n");
+  }
+
+  names(): string[] {
+    return [...this.tools.keys()].sort((a, b) => a.localeCompare(b));
   }
 }
 
@@ -328,9 +333,20 @@ export function buildDefaultRegistry(config: ButterclawConfig): ToolRegistry {
       handler: workspace.runShell
     }
   ];
-  specs.forEach((spec) => registry.register(spec));
-  registerGoogleTools(registry, config);
+  specs.forEach((spec) => registerIfEnabled(registry, spec, config));
+  registerGoogleTools(
+    {
+      register: (spec) => registerIfEnabled(registry, spec, config)
+    },
+    config
+  );
   return registry;
+}
+
+export function registerIfEnabled(registry: ToolRegistry, spec: ToolSpec, config: ButterclawConfig): void {
+  if (isToolEnabled(spec.name, config)) {
+    registry.register(spec);
+  }
 }
 
 function boundedInt(value: unknown, min: number, max: number, fallback: number): number {

@@ -74,6 +74,18 @@ export class SessionStore {
     return true;
   }
 
+  prune(name: string, maxTurns: number): number {
+    const turns = this.read(name);
+    const limit = Number.isFinite(maxTurns) ? Math.max(0, Math.trunc(maxTurns)) : turns.length;
+    if (turns.length <= limit) {
+      return 0;
+    }
+    const kept = turns.slice(-limit);
+    ensureDir(this.sessionsDir);
+    fs.writeFileSync(this.fileFor(name), kept.map((turn) => JSON.stringify(turn)).join("\n") + (kept.length ? "\n" : ""), "utf8");
+    return turns.length - kept.length;
+  }
+
   format(name: string, maxTurns = 50): string {
     const turns = this.read(name).slice(-maxTurns);
     if (!turns.length) {

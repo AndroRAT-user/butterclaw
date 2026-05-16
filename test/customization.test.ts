@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { ButterclawAgent } from "../src/agent.js";
 import { AgentProfile, AgentStore } from "../src/agents.js";
-import { runAgentCommand, runBackupCommand, runDoctorCommand, runSessionCommand, runSkillCommand, runTeamCommand } from "../src/cli.js";
+import { runAgentCommand, runBackupCommand, runDoctorCommand, runSessionCommand, runSkillCommand, runSlashCommand, runTeamCommand } from "../src/cli.js";
 import { defaultConfig } from "../src/config.js";
 import { Message, Provider, ProviderResponse } from "../src/providers.js";
 import { SessionStore } from "../src/sessions.js";
@@ -120,6 +120,23 @@ test("session command shows and clears saved transcripts", () => {
   assert.deepEqual(store.read("build-log"), []);
 });
 
+test("session command prunes old turns", () => {
+  const config = tempConfig();
+  const store = new SessionStore(config.sessionsDir);
+  const lines: string[] = [];
+
+  store.append("Build Log", "user", "one");
+  store.append("Build Log", "assistant", "two");
+  store.append("Build Log", "user", "three");
+
+  assert.equal(runSessionCommand(config, ["prune", "build-log", "2"], (line) => lines.push(line)), 0);
+  const turns = store.read("build-log");
+  assert.equal(turns.length, 2);
+  assert.equal(turns[0].content, "two");
+  assert.equal(turns[1].content, "three");
+  assert.match(lines.join("\n"), /Pruned 1 old turn/);
+});
+
 test("doctor command reports local runtime health", async () => {
   const config = tempConfig();
   createLocalFiles(config);
@@ -229,6 +246,15 @@ test("delegation can target a saved agent team", async () => {
   assert.match(result.output, /## reviewer/);
 });
 
+test("tool policy can disable delegation tools", async () => {
+  const config = tempConfig();
+  config.toolDeny = ["group:agents"];
+  const agent = new ButterclawAgent(config);
+
+  assert.equal(agent.registry.names().includes("delegate_task"), false);
+  assert.match((await agent.registry.call("delegate_task", { task: "work" })).output, /Unknown tool/);
+});
+
 test("named sessions persist turns and replay them into later prompts", async () => {
   const config = tempConfig();
   const provider = new RecordingProvider();
@@ -246,4 +272,37 @@ test("named sessions persist turns and replay them into later prompts", async ()
   assert.equal(secondPrompt.at(-1)?.content, "second request");
   assert.equal(secondPrompt.some((message) => message.role === "user" && message.content === "first request"), true);
   assert.equal(secondPrompt.some((message) => message.role === "assistant" && message.content === "done"), true);
+});
+
+test("named sessions are pruned after runs", async () => {
+  const config = tempConfig();
+  config.sessionMaxTurns = 2;
+  const provider = new RecordingProvider();
+  const agent = new ButterclawAgent(config, { provider, sessionName: "long-build" });
+
+  await agent.run("first request");
+  await agent.run("second request");
+
+  const turns = new SessionStore(config.sessionsDir).read("long-build");
+  assert.equal(turns.length, 2);
+  assert.equal(turns[0].content, "second request");
+  assert.equal(turns[1].content, "done");
+});
+
+test("slash commands are handled locally without calling the provider", async () => {
+  const config = tempConfig();
+  const provider = new RecordingProvider();
+  const agent = new ButterclawAgent(config, { provider, sessionName: "slash-work" });
+  const store = new SessionStore(config.sessionsDir);
+  const lines: string[] = [];
+  store.append("slash-work", "user", "old request");
+
+  assert.equal(await runSlashCommand(config, "/status", { agent, sessionName: "slash-work", outputFunc: (line) => lines.push(line) }), true);
+  assert.match(lines.join("\n"), /Butterclaw Status/);
+  assert.match(lines.join("\n"), /Tool profile: full/);
+
+  lines.length = 0;
+  assert.equal(await runSlashCommand(config, "/new", { agent, sessionName: "slash-work", outputFunc: (line) => lines.push(line) }), true);
+  assert.deepEqual(store.read("slash-work"), []);
+  assert.equal(provider.messages.length, 0);
 });

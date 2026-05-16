@@ -5,6 +5,46 @@ on the public OpenClaw channel model: a channel has a config surface, access
 policy, status command, target routing, chunked delivery, and optional webhook
 entrypoint.
 
+## Scheduling
+
+Scheduling uses a local JSON store and the existing Butterclaw agent runtime.
+Use it for reminders and recurring checks without running a heavy gateway stack:
+
+```cmd
+butterclaw schedule add --name ops-sweep --every 2h --message "inspect project status"
+butterclaw schedule list
+butterclaw schedule run --due
+```
+
+Agent tools:
+
+- `schedule_list`
+- `schedule_add`
+- `schedule_remove`
+
+## Gateway Hooks
+
+Butterclaw Gateway exposes local authenticated hooks for external automation:
+
+```cmd
+set BUTTERCLAW_GATEWAY_TOKEN=choose-a-local-token
+butterclaw gateway serve
+```
+
+Agent hook:
+
+```cmd
+curl -X POST http://127.0.0.1:18789/hooks/agent -H "Authorization: Bearer choose-a-local-token" -H "Content-Type: application/json" -d "{\"message\":\"summarize this workspace\"}"
+```
+
+Wake hook:
+
+```cmd
+curl -X POST http://127.0.0.1:18789/hooks/wake -H "Authorization: Bearer choose-a-local-token" -H "Content-Type: application/json" -d "{\"text\":\"check the build\"}"
+```
+
+See [GATEWAY.md](GATEWAY.md).
+
 ## GitHub
 
 GitHub uses the official `gh` CLI. Sign in once with OAuth:

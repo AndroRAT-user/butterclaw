@@ -38,6 +38,11 @@ export interface ButterclawConfig {
   githubCliPath: string;
   githubDefaultRepo: string;
   githubMaxItems: number;
+  gatewayHost: string;
+  gatewayPort: number;
+  gatewayHookPath: string;
+  gatewayTokenEnv: string;
+  gatewayMaxBodyBytes: number;
   whatsappMode: WhatsAppMode;
   whatsappGraphApiVersion: string;
   whatsappCloudTokenEnv: string;
@@ -60,6 +65,7 @@ export interface ButterclawConfig {
   googleClientSecretEnv: string;
   googleCalendarId: string;
   googleOAuthPath: string;
+  schedulePath: string;
   agentsDir: string;
   teamsDir: string;
   sessionsDir: string;
@@ -110,6 +116,11 @@ export function defaultConfig(overrides: Partial<ButterclawConfig> = {}): Butter
     githubCliPath: "gh",
     githubDefaultRepo: "",
     githubMaxItems: 20,
+    gatewayHost: "127.0.0.1",
+    gatewayPort: 18789,
+    gatewayHookPath: "/hooks",
+    gatewayTokenEnv: "BUTTERCLAW_GATEWAY_TOKEN",
+    gatewayMaxBodyBytes: 256 * 1024,
     whatsappMode: "bridge",
     whatsappGraphApiVersion: "v25.0",
     whatsappCloudTokenEnv: "WHATSAPP_CLOUD_TOKEN",
@@ -132,6 +143,7 @@ export function defaultConfig(overrides: Partial<ButterclawConfig> = {}): Butter
     googleClientSecretEnv: "GOOGLE_CLIENT_SECRET",
     googleCalendarId: "primary",
     googleOAuthPath: path.join(configDir, "google-oauth.json"),
+    schedulePath: path.join(configDir, "schedule.json"),
     agentsDir: path.join(configDir, "agents"),
     teamsDir: path.join(configDir, "teams"),
     sessionsDir: path.join(configDir, "sessions"),
@@ -156,6 +168,11 @@ export function normalizeConfig(config: ButterclawConfig): ButterclawConfig {
     githubCliPath: config.githubCliPath || "gh",
     githubDefaultRepo: config.githubDefaultRepo || "",
     githubMaxItems: Number.isFinite(config.githubMaxItems) ? Math.max(1, Math.trunc(config.githubMaxItems)) : 20,
+    gatewayHost: config.gatewayHost || "127.0.0.1",
+    gatewayPort: Number.isFinite(config.gatewayPort) ? Math.max(0, Math.trunc(config.gatewayPort)) : 18789,
+    gatewayHookPath: normalizeHttpPath(config.gatewayHookPath || "/hooks"),
+    gatewayTokenEnv: config.gatewayTokenEnv || "BUTTERCLAW_GATEWAY_TOKEN",
+    gatewayMaxBodyBytes: Number.isFinite(config.gatewayMaxBodyBytes) ? Math.max(1024, Math.trunc(config.gatewayMaxBodyBytes)) : 256 * 1024,
     whatsappMode: config.whatsappMode ?? "bridge",
     whatsappGraphApiVersion: config.whatsappGraphApiVersion || "v25.0",
     whatsappCloudTokenEnv: config.whatsappCloudTokenEnv || "WHATSAPP_CLOUD_TOKEN",
@@ -178,9 +195,16 @@ export function normalizeConfig(config: ButterclawConfig): ButterclawConfig {
     skillsDir: path.resolve(config.skillsDir || path.join(configDir, "skills")),
     memoryPath: path.resolve(config.memoryPath || path.join(configDir, "memory.jsonl")),
     googleOAuthPath: path.resolve(config.googleOAuthPath || path.join(configDir, "google-oauth.json")),
+    schedulePath: path.resolve(config.schedulePath || path.join(configDir, "schedule.json")),
     whatsappStatePath: path.resolve(config.whatsappStatePath || path.join(configDir, "whatsapp-state.json")),
     telegramStatePath: path.resolve(config.telegramStatePath || path.join(configDir, "telegram-state.json"))
   };
+}
+
+function normalizeHttpPath(value: string): string {
+  const withSlash = value.startsWith("/") ? value : `/${value}`;
+  const trimmed = withSlash.length > 1 ? withSlash.replace(/\/+$/g, "") : withSlash;
+  return trimmed === "/" ? "/hooks" : trimmed;
 }
 
 export function loadConfig(customPath?: string): ButterclawConfig {

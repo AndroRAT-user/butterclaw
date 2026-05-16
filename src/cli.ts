@@ -8,8 +8,10 @@ import { TelegramChannel, TelegramError } from "./channels/telegram.js";
 import { WhatsAppChannel, WhatsAppError, whatsappStatus } from "./channels/whatsapp.js";
 import { ButterclawConfig, configPath, loadConfig, saveConfig } from "./config.js";
 import { doctorChecks } from "./doctor.js";
+import { ButterclawGateway, gatewayStatus } from "./gateway.js";
 import { githubStatus } from "./github.js";
 import { GOOGLE_WORKSPACE_SCOPES, googleStatus, loginGoogle, logoutGoogle } from "./google.js";
+import { formatScheduleList, formatScheduleRuns, ScheduleJob, ScheduleStore } from "./scheduler.js";
 import { SessionStore } from "./sessions.js";
 import { runSetup } from "./setup.js";
 import { SkillLoader } from "./skills.js";
@@ -56,6 +58,11 @@ interface Args {
   githubCliPath?: string;
   githubDefaultRepo?: string;
   githubMaxItems?: number;
+  gatewayHost?: string;
+  gatewayPort?: number;
+  gatewayHookPath?: string;
+  gatewayTokenEnv?: string;
+  gatewayMaxBodyBytes?: number;
   whatsappMode?: ButterclawConfig["whatsappMode"];
   whatsappDefaultTo?: string;
   whatsappAllowedChat: string[];
@@ -112,6 +119,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   }
   if (command === "github" || command === "gh") {
     return handleAsyncCommand(() => runGitHubCommand(config, args.task.slice(1)));
+  }
+  if (command === "gateway" || command === "gw") {
+    return handleAsyncCommand(() => runGatewayCommand(config, args.task.slice(1)));
+  }
+  if (command === "schedule" || command === "schedules" || command === "cron") {
+    return handleAsyncCommand(() => runScheduleCommand(config, args.task.slice(1)));
   }
   if (command === "whatsapp" || command === "wa") {
     return handleAsyncCommand(() => runWhatsAppCommand(config, args.task.slice(1)));
@@ -202,6 +215,11 @@ export function parseArgs(argv: string[]): Args {
     "--github-cli-path": (value) => (args.githubCliPath = value),
     "--github-default-repo": (value) => (args.githubDefaultRepo = value),
     "--github-max-items": (value) => (args.githubMaxItems = Number(value)),
+    "--gateway-host": (value) => (args.gatewayHost = value),
+    "--gateway-port": (value) => (args.gatewayPort = Number(value)),
+    "--gateway-hook-path": (value) => (args.gatewayHookPath = value),
+    "--gateway-token-env": (value) => (args.gatewayTokenEnv = value),
+    "--gateway-max-body-bytes": (value) => (args.gatewayMaxBodyBytes = Number(value)),
     "--whatsapp-mode": (value) => (args.whatsappMode = value as ButterclawConfig["whatsappMode"]),
     "--whatsapp-default-to": (value) => (args.whatsappDefaultTo = value),
     "--whatsapp-allowed-chat": (value) => args.whatsappAllowedChat.push(...splitCsv(value)),
@@ -274,6 +292,11 @@ function applyOverrides(config: ButterclawConfig, args: Args): void {
   if (args.githubCliPath) config.githubCliPath = args.githubCliPath;
   if (args.githubDefaultRepo) config.githubDefaultRepo = args.githubDefaultRepo;
   if (args.githubMaxItems !== undefined) config.githubMaxItems = args.githubMaxItems;
+  if (args.gatewayHost) config.gatewayHost = args.gatewayHost;
+  if (args.gatewayPort !== undefined) config.gatewayPort = args.gatewayPort;
+  if (args.gatewayHookPath) config.gatewayHookPath = args.gatewayHookPath;
+  if (args.gatewayTokenEnv) config.gatewayTokenEnv = args.gatewayTokenEnv;
+  if (args.gatewayMaxBodyBytes !== undefined) config.gatewayMaxBodyBytes = args.gatewayMaxBodyBytes;
   if (args.whatsappMode) config.whatsappMode = args.whatsappMode;
   if (args.whatsappDefaultTo) config.whatsappDefaultTo = args.whatsappDefaultTo;
   if (args.whatsappAllowedChat.length) config.whatsappAllowedChats = args.whatsappAllowedChat;
@@ -393,7 +416,9 @@ export async function runSlashCommand(
         `${button("/new")} clear the current named session`,
         `${button("/reset")} same as /new`,
         `${button("/doctor")} run local diagnostics`,
-        `${button("/backup")} save local agents, teams, skills, sessions, and memory`,
+        `${button("/backup")} save local agents, teams, skills, sessions, schedules, and memory`,
+        `${button("/schedule")} show local reminders and recurring jobs`,
+        `${button("/gateway")} show local gateway and hook status`,
         `${button("/github")} show gh OAuth and repo status`,
         `${button("/whatsapp")} show WhatsApp channel status`
       ])
@@ -442,6 +467,16 @@ export async function runSlashCommand(
 
   if (command === "backup" || command === "export") {
     runBackupCommand(config, rest ? ["create", rest] : ["create"], outputFunc);
+    return true;
+  }
+
+  if (command === "schedule" || command === "cron") {
+    outputFunc(panel("Schedule", formatScheduleList(new ScheduleStore(config.schedulePath).list()).split("\n")));
+    return true;
+  }
+
+  if (command === "gateway" || command === "gw") {
+    outputFunc(panel("Gateway", gatewayStatus(config).split("\n")));
     return true;
   }
 
@@ -724,6 +759,93 @@ export async function runGitHubCommand(config: ButterclawConfig, argv: string[],
   throw new Error("Usage: butterclaw github status | prs [repo] | pr <number|url> [repo] | issues [repo] | runs [repo]");
 }
 
+export async function runGatewayCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): Promise<number> {
+  const command = argv[0]?.toLowerCase() ?? "status";
+  const gateway = new ButterclawGateway(config);
+  if (command === "status" || command === "health") {
+    outputFunc(panel("Gateway", gateway.status().split("\n")));
+    return 0;
+  }
+  if (command === "serve" || command === "start" || command === "run") {
+    return gateway.serve();
+  }
+  throw new Error("Usage: butterclaw gateway status | serve");
+}
+
+export async function runScheduleCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): Promise<number> {
+  const store = new ScheduleStore(config.schedulePath);
+  const command = normalizeListCommand(argv[0]?.toLowerCase() ?? "list");
+  if (command === "list" || command === "status") {
+    outputFunc(panel("Schedule", formatScheduleList(store.list()).split("\n")));
+    return 0;
+  }
+  if (command === "show" || command === "get") {
+    const job = store.get(argv[1] ?? "");
+    if (!job) throw new Error(`Unknown schedule: ${argv[1] ?? ""}`);
+    outputFunc(JSON.stringify(job, null, 2));
+    return 0;
+  }
+  if (command === "runs" || command === "history") {
+    const job = argv[1] ? store.get(argv[1]) : null;
+    outputFunc(formatScheduleRuns(store.runs(job?.id ?? argv[1], 50)));
+    return 0;
+  }
+  if (command === "add" || command === "create") {
+    const parsed = parseCommandOptions(argv.slice(1));
+    const message = parsed.values.message ?? parsed.values.task ?? parsed.positionals.join(" ");
+    const job = store.add({
+      name: parsed.values.name ?? parsed.positionals[0],
+      at: parsed.values.at,
+      every: parsed.values.every,
+      message,
+      session: parsed.values.session,
+      agent: parsed.values.agent,
+      deleteAfterRun: parsed.flags.has("delete-after-run") ? true : undefined,
+      enabled: !parsed.flags.has("disabled")
+    });
+    outputFunc(
+      panel("Schedule", [
+        successLine(`Created ${job.name}`),
+        `ID: ${job.id}`,
+        `Next run: ${job.nextRunAt}`,
+        `Kind: ${job.kind}${job.everySeconds ? ` (${job.everySeconds}s)` : ""}`
+      ])
+    );
+    return 0;
+  }
+  if (command === "remove" || command === "delete" || command === "rm") {
+    const target = argv[1] ?? "";
+    const removed = store.remove(target);
+    outputFunc(removed ? successLine(`Removed schedule ${target}`) : `No schedule found: ${target}`);
+    return removed ? 0 : 1;
+  }
+  if (command === "run") {
+    const parsed = parseCommandOptions(argv.slice(1));
+    const dueOnly = parsed.flags.has("due") || !parsed.positionals[0] || parsed.positionals[0] === "--due";
+    const jobs = dueOnly ? store.due() : [store.get(parsed.positionals[0] ?? "")].filter((job): job is ScheduleJob => job !== null);
+    if (!jobs.length) {
+      outputFunc(dueOnly ? "No schedules are due." : `Unknown schedule: ${parsed.positionals[0] ?? ""}`);
+      return dueOnly ? 0 : 1;
+    }
+    return runScheduleJobs(config, store, jobs, outputFunc);
+  }
+  if (command === "daemon" || command === "watch") {
+    const parsed = parseCommandOptions(argv.slice(1));
+    const pollSeconds = Math.max(1, Math.trunc(Number(parsed.values["poll-seconds"] ?? parsed.values.poll ?? 30)));
+    outputFunc(`Butterclaw schedule daemon polling every ${pollSeconds}s. Press Ctrl+C to stop.`);
+    while (true) {
+      await runScheduleJobs(config, store, store.due(), outputFunc, true);
+      if (parsed.flags.has("once")) {
+        return 0;
+      }
+      await sleep(pollSeconds * 1000);
+    }
+  }
+  throw new Error(
+    "Usage: butterclaw schedule list | add --at <time>|--every <duration> --message <task> [--name name] [--session name] [--agent name] | run [--due|id] | runs [id] | remove <id>"
+  );
+}
+
 export async function runWhatsAppCommand(config: ButterclawConfig, argv: string[], outputFunc = console.log): Promise<number> {
   const command = argv[0]?.toLowerCase() ?? "status";
   const channel = new WhatsAppChannel(config);
@@ -742,6 +864,51 @@ export async function runWhatsAppCommand(config: ButterclawConfig, argv: string[
     return runWhatsAppWebhook(config);
   }
   throw new Error("Usage: butterclaw whatsapp status | send <to> <text...> | webhook");
+}
+
+async function runScheduleJobs(
+  config: ButterclawConfig,
+  store: ScheduleStore,
+  jobs: ScheduleJob[],
+  outputFunc: (line: string) => void,
+  quietWhenEmpty = false
+): Promise<number> {
+  if (!jobs.length) {
+    if (!quietWhenEmpty) {
+      outputFunc("No schedules are due.");
+    }
+    return 0;
+  }
+  let ok = true;
+  for (const job of jobs) {
+    const startedAt = new Date();
+    outputFunc(`Running schedule ${job.name} (${job.id})...`);
+    try {
+      const runConfig = { ...config };
+      let profile: AgentProfile | undefined;
+      if (job.agent) {
+        const loaded = new AgentStore(config.agentsDir).get(job.agent);
+        if (!loaded) {
+          throw new Error(`Unknown agent profile for schedule ${job.name}: ${job.agent}`);
+        }
+        profile = loaded;
+        applyAgentProfile(runConfig, profile);
+      }
+      const result = await new ButterclawAgent(runConfig, {
+        ...(profile ? { agentProfile: profile } : {}),
+        ...(job.session ? { sessionName: job.session } : {})
+      }).run(job.message);
+      const run = store.recordRun(job, "ok", result.answer, startedAt);
+      outputFunc(successLine(`Schedule ${job.name} finished as ${run.id}`));
+      outputFunc(result.answer);
+    } catch (error) {
+      ok = false;
+      const message = error instanceof Error ? error.message : String(error);
+      const run = store.recordRun(job, "error", message, startedAt);
+      outputFunc(`Schedule ${job.name} failed as ${run.id}: ${message}`);
+    }
+  }
+  return ok ? 0 : 1;
 }
 
 function cliRepoArgs(config: ButterclawConfig, argv: string[]): Record<string, unknown> {
@@ -771,6 +938,7 @@ function parseCommandOptions(argv: string[]): { positionals: string[]; values: R
   const positionals: string[] = [];
   const values: Record<string, string> = {};
   const flags = new Set<string>();
+  const booleanFlags = new Set(["force", "no-browser", "delete-after-run", "disabled", "due", "once"]);
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (!arg.startsWith("--")) {
@@ -778,7 +946,7 @@ function parseCommandOptions(argv: string[]): { positionals: string[]; values: R
       continue;
     }
     const key = arg.slice(2);
-    if (key === "force" || key === "no-browser") {
+    if (booleanFlags.has(key) || index + 1 >= argv.length || argv[index + 1].startsWith("--")) {
       flags.add(key);
       continue;
     }
@@ -868,4 +1036,8 @@ function formatCliError(error: unknown): string {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || error.message.includes("Aborted with Ctrl+C"));
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

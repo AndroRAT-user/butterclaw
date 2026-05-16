@@ -25,6 +25,7 @@ export async function doctorChecks(config: ButterclawConfig): Promise<DoctorChec
     pathCheck("Sessions directory", config.sessionsDir, "directory"),
     pathCheck("Skills directory", config.skillsDir, "directory"),
     pathCheck("Memory file", config.memoryPath, "file"),
+    pathCheck("Schedule file", config.schedulePath, "file"),
     {
       label: "Shell tool",
       ok: config.shellMode === "deny",
@@ -34,6 +35,11 @@ export async function doctorChecks(config: ButterclawConfig): Promise<DoctorChec
       label: "Tool policy",
       ok: enabledToolNames(config).length > 0,
       detail: `${config.toolProfile} profile, ${enabledToolNames(config).length} tool(s) enabled`
+    },
+    {
+      label: "Gateway hooks",
+      ok: Boolean(process.env[config.gatewayTokenEnv]),
+      detail: `${config.gatewayHookPath}; ${config.gatewayTokenEnv} ${process.env[config.gatewayTokenEnv] ? "is set" : "is not set"}`
     },
     providerCheck(config),
     {

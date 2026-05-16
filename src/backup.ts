@@ -48,6 +48,7 @@ function collectFiles(config: ButterclawConfig): BackupFileEntry[] {
   collectDir(config.configDir, config.skillsDir, files);
   collectDir(config.configDir, config.sessionsDir, files);
   collectFile(config.configDir, config.memoryPath, files);
+  collectFile(config.configDir, config.schedulePath, files);
   return files.sort((a, b) => a.path.localeCompare(b.path));
 }
 

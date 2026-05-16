@@ -19,6 +19,7 @@ powers with fewer moving pieces.
 - Gmail and Google Calendar tools
 - GitHub tools through gh OAuth
 - WhatsApp bridge/cloud/webhook channel
+- loopback HTTP gateway with authenticated wake/agent hooks
 - workspace-confined file tools and workspace mapping
 - tool profiles with allow and deny rules
 - local slash commands
@@ -27,6 +28,7 @@ powers with fewer moving pieces.
 - JSONL memory
 - Markdown skills
 - Telegram long-polling channel
+- local schedule store for reminders and recurring jobs
 - local usage tracking
 - unit tests
 
@@ -41,11 +43,10 @@ powers with fewer moving pieces.
 
 ## Milestone 2: Lightweight Gateway
 
-- local HTTP gateway bound to `127.0.0.1`
-- webhook receiver for selected integrations; Telegram starts with long polling
-- scheduler for reminders and recurring jobs
-- background task queue using SQLite
-- progress notifications without a heavy daemon stack
+- WebSocket control/RPC on the local gateway
+- mapped webhook transforms for selected integrations; Telegram starts with long polling
+- optional SQLite-backed background task queue
+- progress notifications for scheduled and background work without a heavy daemon stack
 
 ## Milestone 3: Practical Integrations
 

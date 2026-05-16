@@ -42,6 +42,12 @@ test("cli parser reads flags and task text", () => {
     "primary",
     "--github-default-repo",
     "owner/repo",
+    "--gateway-host",
+    "127.0.0.1",
+    "--gateway-port",
+    "19001",
+    "--gateway-token-env",
+    "MY_GATEWAY_TOKEN",
     "--whatsapp-mode",
     "cloud",
     "--whatsapp-allowed-chat",
@@ -66,6 +72,9 @@ test("cli parser reads flags and task text", () => {
   assert.equal(args.googleClientSecretEnv, "GOOGLE_SECRET");
   assert.equal(args.googleCalendarId, "primary");
   assert.equal(args.githubDefaultRepo, "owner/repo");
+  assert.equal(args.gatewayHost, "127.0.0.1");
+  assert.equal(args.gatewayPort, 19001);
+  assert.equal(args.gatewayTokenEnv, "MY_GATEWAY_TOKEN");
   assert.equal(args.whatsappMode, "cloud");
   assert.deepEqual(args.whatsappAllowedChat, ["1555", "1666"]);
   assert.equal(args.whatsappGroupPolicy, "open");
@@ -91,6 +100,7 @@ test("setup writes config and starter skill", async () => {
   assert.equal(fs.existsSync(path.join(root, "config", "teams")), true);
   assert.equal(fs.existsSync(path.join(root, "config", "sessions")), true);
   assert.equal(fs.existsSync(path.join(root, "config", "memory.jsonl")), true);
+  assert.equal(fs.existsSync(path.join(root, "config", "schedule.json")), true);
   assert.equal(fs.existsSync(path.join(root, "config", "skills", "starter.md")), true);
   assert.match(lines.join("\n"), /Wrote config/);
 });
@@ -105,6 +115,7 @@ test("setup with custom config keeps files nearby", async () => {
   assert.equal(fs.existsSync(path.join(root, "custom", "sessions")), true);
   assert.equal(fs.existsSync(path.join(root, "custom", "skills", "starter.md")), true);
   assert.equal(fs.existsSync(path.join(root, "custom", "memory.jsonl")), true);
+  assert.equal(fs.existsSync(path.join(root, "custom", "schedule.json")), true);
 });
 
 test("missing custom config defaults nearby", () => {
@@ -115,6 +126,7 @@ test("missing custom config defaults nearby", () => {
   assert.equal(config.teamsDir, path.join(root, "custom", "teams"));
   assert.equal(config.sessionsDir, path.join(root, "custom", "sessions"));
   assert.equal(config.skillsDir, path.join(root, "custom", "skills"));
+  assert.equal(config.schedulePath, path.join(root, "custom", "schedule.json"));
   assert.equal(config.whatsappStatePath, path.join(root, "custom", "whatsapp-state.json"));
 });
 

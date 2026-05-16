@@ -62,6 +62,7 @@ export async function runSetup(
     outputFunc(labelValue("Sessions folder", config.sessionsDir));
     outputFunc(labelValue("Skills folder", config.skillsDir));
     outputFunc(labelValue("Memory file", config.memoryPath));
+    outputFunc(labelValue("Schedule file", config.schedulePath));
     outputFunc("");
     outputFunc(`${button("run")} Try it now:`);
     outputFunc(`  butterclaw --config "${targetPath}" "list the files in this workspace"`);
@@ -94,6 +95,7 @@ export function alignConfigDirWithCustomPath(config: ButterclawConfig, targetPat
   config.sessionsDir = path.join(config.configDir, "sessions");
   config.skillsDir = path.join(config.configDir, "skills");
   config.memoryPath = path.join(config.configDir, "memory.jsonl");
+  config.schedulePath = path.join(config.configDir, "schedule.json");
   config.whatsappStatePath = path.join(config.configDir, "whatsapp-state.json");
   config.telegramStatePath = path.join(config.configDir, "telegram-state.json");
 }
@@ -132,6 +134,10 @@ export function createLocalFiles(config: ButterclawConfig): void {
   }
   ensureParent(config.memoryPath);
   fs.closeSync(fs.openSync(config.memoryPath, "a"));
+  ensureParent(config.schedulePath);
+  if (!fs.existsSync(config.schedulePath)) {
+    fs.writeFileSync(config.schedulePath, JSON.stringify({ version: 1, jobs: [], runs: [] }, null, 2), "utf8");
+  }
   ensureParent(config.telegramStatePath);
   ensureParent(config.whatsappStatePath);
 }

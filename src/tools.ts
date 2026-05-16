@@ -5,6 +5,7 @@ import { registerWhatsAppTools } from "./channels/whatsapp.js";
 import { ButterclawConfig } from "./config.js";
 import { registerGitHubTools } from "./github.js";
 import { registerGoogleTools } from "./google.js";
+import { formatScheduleList, ScheduleStore } from "./scheduler.js";
 import { isToolEnabled } from "./tool-policy.js";
 import { ensureParent, isRecord, truncate } from "./util.js";
 
@@ -333,6 +334,19 @@ export function buildDefaultRegistry(config: ButterclawConfig): ToolRegistry {
       description: "Run a shell command in the workspace when explicitly enabled",
       args: { command: "command string", timeout: "seconds, capped by config" },
       handler: workspace.runShell
+    },
+    {
+      name: "gateway_status",
+      description: "Show local gateway endpoint and hook configuration",
+      args: {},
+      handler: () => ({
+        ok: true,
+        output: [
+          `Gateway: http://${config.gatewayHost}:${config.gatewayPort}`,
+          `Hooks: http://${config.gatewayHost}:${config.gatewayPort}${config.gatewayHookPath}`,
+          `Token env ${config.gatewayTokenEnv}: ${process.env[config.gatewayTokenEnv] ? "set" : "not set"}`
+        ].join("\n")
+      })
     }
   ];
   specs.forEach((spec) => registerIfEnabled(registry, spec, config));
@@ -348,6 +362,12 @@ export function buildDefaultRegistry(config: ButterclawConfig): ToolRegistry {
     },
     config
   );
+  registerScheduleTools(
+    {
+      register: (spec) => registerIfEnabled(registry, spec, config)
+    },
+    config
+  );
   registerWhatsAppTools(
     {
       register: (spec) => registerIfEnabled(registry, spec, config)
@@ -355,6 +375,53 @@ export function buildDefaultRegistry(config: ButterclawConfig): ToolRegistry {
     config
   );
   return registry;
+}
+
+function registerScheduleTools(adapter: { register: (spec: ToolSpec) => void }, config: ButterclawConfig): void {
+  const store = new ScheduleStore(config.schedulePath);
+  adapter.register({
+    name: "schedule_list",
+    description: "List local scheduled reminders and recurring tasks",
+    args: {},
+    handler: () => ({ ok: true, output: formatScheduleList(store.list()) })
+  });
+  adapter.register({
+    name: "schedule_add",
+    description: "Create a local scheduled reminder or recurring task",
+    args: {
+      name: "optional schedule name",
+      at: "one-shot time: ISO timestamp, now, or relative duration like 20m",
+      every: "recurring interval like 1h or 1d; use instead of at",
+      message: "task message to run later",
+      session: "optional named session",
+      agent: "optional saved agent profile",
+      deleteAfterRun: "optional boolean for one-shot cleanup"
+    },
+    handler: (args) => {
+      const job = store.add({
+        name: optionalString(args.name),
+        at: optionalString(args.at),
+        every: optionalString(args.every),
+        message: String(args.message ?? args.task ?? ""),
+        session: optionalString(args.session),
+        agent: optionalString(args.agent),
+        deleteAfterRun: optionalBoolean(args.deleteAfterRun)
+      });
+      return { ok: true, output: `Scheduled ${job.name} (${job.id}) for ${job.nextRunAt}` };
+    }
+  });
+  adapter.register({
+    name: "schedule_remove",
+    description: "Remove a local scheduled task by id or name",
+    args: { id: "schedule id or name" },
+    handler: (args) => {
+      const id = String(args.id ?? args.name ?? "").trim();
+      if (!id) {
+        return { ok: false, output: "id is required" };
+      }
+      return store.remove(id) ? { ok: true, output: `Removed schedule ${id}` } : { ok: false, output: `No schedule found: ${id}` };
+    }
+  });
 }
 
 export function registerIfEnabled(registry: ToolRegistry, spec: ToolSpec, config: ButterclawConfig): void {
@@ -393,5 +460,27 @@ function readPackageScripts(file: string): string[] {
     return [];
   }
   return [];
+}
+
+function optionalString(value: unknown): string | undefined {
+  const text = String(value ?? "").trim();
+  return text || undefined;
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (typeof value === "boolean") {
+    return value;
+  }
+  const text = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on"].includes(text)) {
+    return true;
+  }
+  if (["0", "false", "no", "n", "off"].includes(text)) {
+    return false;
+  }
+  return undefined;
 }
 

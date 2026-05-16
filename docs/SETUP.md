@@ -19,8 +19,8 @@ The setup flow:
 - asks for model, workspace, and step limits
 - keeps shell access disabled unless you explicitly enable it
 - optionally configures Telegram chat access
-- creates the config file, memory file, agents folder, teams folder, sessions
-  folder, and skills folder
+- creates the config file, memory file, schedule file, agents folder, teams
+  folder, sessions folder, and skills folder
 - writes a tiny starter skill
 - prints the command to run next
 
@@ -103,5 +103,29 @@ Create a local backup before large changes:
 butterclaw backup create
 ```
 
-The backup includes agents, teams, skills, sessions, and memory. OAuth token
-state and usage files are excluded.
+The backup includes agents, teams, skills, sessions, schedules, and memory.
+OAuth token state and usage files are excluded.
+
+## Local Schedules
+
+Butterclaw can store one-shot reminders and recurring jobs in the config folder:
+
+```cmd
+butterclaw schedule add --name check-in --at 20m --message "remind me to review the build"
+butterclaw schedule add --name morning-brief --every 1d --message "summarize this workspace"
+butterclaw schedule run --due
+```
+
+See [SCHEDULING.md](SCHEDULING.md) for the command surface.
+
+## Gateway Hooks
+
+For local automation hooks, set a token and start the gateway:
+
+```cmd
+set BUTTERCLAW_GATEWAY_TOKEN=choose-a-local-token
+butterclaw gateway serve
+```
+
+Use `butterclaw gateway status` or `/gateway` to inspect the configured host,
+port, hook path, and token environment variable. See [GATEWAY.md](GATEWAY.md).

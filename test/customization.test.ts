@@ -228,6 +228,7 @@ test("backup command saves local state without OAuth tokens", () => {
   assert.equal(backup.files.some((file) => file.path === "skills/release.md"), true);
   assert.equal(backup.files.some((file) => file.path === "sessions/build.jsonl"), true);
   assert.equal(backup.files.some((file) => file.path === "memory.jsonl"), true);
+  assert.equal(backup.files.some((file) => file.path === "schedule.json"), true);
   assert.equal(backupText.includes("secret-refresh-token"), false);
   assert.equal(backupText.includes("secret-chat"), false);
   assert.equal(backup.excluded.includes("google-oauth.json"), true);

@@ -63,8 +63,8 @@ export function renderHelp(version: string): string {
     `${paint("accent", version)}  lightweight local-first agent runtime`,
     "",
     commandRow(["setup", "doctor", "backup", "agent"]),
-    commandRow(["team", "skill", "session", "google"]),
-    commandRow(["github", "whatsapp"]),
+    commandRow(["team", "skill", "session", "schedule"]),
+    commandRow(["google", "github", "gateway", "whatsapp"]),
     "",
     "Usage:",
     "  butterclaw [options] [task...]",
@@ -102,6 +102,9 @@ export function renderHelp(version: string): string {
     "  --google-calendar-id <id>",
     "  --github-default-repo <owner/repo>",
     "  --github-cli-path <path>",
+    "  --gateway-host <host>",
+    "  --gateway-port <number>",
+    "  --gateway-token-env <name>",
     "  --whatsapp-mode <bridge|cloud>",
     "  --whatsapp-allowed-chat <id>",
     "  --whatsapp-group-allowed-chat <id>",
@@ -123,6 +126,9 @@ export function renderHelp(version: string): string {
     "  butterclaw session list",
     "  butterclaw session show <name>",
     "  butterclaw session prune <name> [maxTurns]",
+    "  butterclaw schedule list",
+    "  butterclaw schedule add --at <time>|--every <duration> --message <task>",
+    "  butterclaw schedule run --due",
     "  butterclaw doctor",
     "  butterclaw backup create [path]",
     "  butterclaw google login",
@@ -130,12 +136,14 @@ export function renderHelp(version: string): string {
     "  butterclaw google logout",
     "  butterclaw github status",
     "  butterclaw github prs [owner/repo]",
+    "  butterclaw gateway status",
+    "  butterclaw gateway serve",
     "  butterclaw whatsapp status",
     "  butterclaw whatsapp send <to> <text...>",
     "  butterclaw whatsapp webhook",
     "",
     "Local slash commands:",
-    "  /status  /tools  /tool-policy  /new  /doctor  /backup  /github  /whatsapp"
+    "  /status  /tools  /tool-policy  /new  /doctor  /backup  /schedule  /gateway  /github  /whatsapp"
   ]);
 }
 

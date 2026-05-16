@@ -37,7 +37,8 @@ channels and the chosen AI model, with local session state and tool execution:
 | Permissions | Fine-grained access control | Started: workspace guard, shell deny-by-default, tool profiles, allow rules, deny rules |
 | Channels | WhatsApp, Discord, Telegram, Slack, etc. | Started: Telegram long polling, WhatsApp bridge/cloud/webhook layer |
 | GitHub | Issues, PRs, CI, repo operations | Started: `gh` CLI tools using gh OAuth |
-| Scheduling | Reminders, heartbeats, background tasks | Planned: SQLite task queue and scheduler |
+| Scheduling | Reminders, recurring jobs, background task records | Started: JSON schedule store, one-shot and recurring jobs, run history, foreground daemon |
+| Gateway | Always-on local control plane, health, hooks, HTTP APIs | Started: loopback HTTP gateway, health/status, model listing, authenticated wake/agent hooks |
 | Browser/app control | Operate real user workflows | Planned: opt-in adapters with explicit permissions |
 | Multi-agent | Delegate and coordinate roles | Started: saved agents, teams, and bounded sub-agents |
 | Local commands | Runtime control without model calls | Started: `/status`, `/tools`, `/tool-policy`, `/new`, `/doctor`, `/backup` |

@@ -13,7 +13,9 @@ Telegram channel without requiring a large service stack.
 - polished terminal UI with panels, status pills, and button-like command labels
 - first-run setup command
 - doctor diagnostics for setup, provider, workspace, and OAuth state
-- local JSON backup for agents, teams, skills, sessions, and memory
+- local JSON backup for agents, teams, skills, sessions, schedules, and memory
+- local scheduler for one-shot reminders and recurring agent jobs
+- loopback HTTP gateway with health, model listing, and authenticated webhooks
 - provider adapters for `mock`, `ollama`, and OpenAI-compatible chat APIs
 - saved agent profiles with custom instructions
 - saved agent teams that can delegate one task to several specialists
@@ -92,8 +94,26 @@ butterclaw /status
 butterclaw /tools
 butterclaw /tool-policy
 butterclaw --session butter-build /new
+butterclaw /schedule
 butterclaw /github
 butterclaw /whatsapp
+```
+
+Schedule a reminder or recurring local agent task:
+
+```cmd
+butterclaw schedule add --name check-in --at 20m --message "remind me to review the build"
+butterclaw schedule add --name morning-brief --every 1d --message "summarize this workspace"
+butterclaw schedule list
+butterclaw schedule run --due
+```
+
+Start the local gateway and receive authenticated hooks:
+
+```cmd
+set BUTTERCLAW_GATEWAY_TOKEN=choose-a-local-token
+butterclaw gateway serve
+curl -X POST http://127.0.0.1:18789/hooks/agent -H "Authorization: Bearer choose-a-local-token" -H "Content-Type: application/json" -d "{\"message\":\"hello\"}"
 ```
 
 Create a skill:
@@ -151,8 +171,45 @@ Profiles:
 
 Groups accepted by `--allow-tool` and `--deny-tool`: `group:read`,
 `group:write`, `group:fs`, `group:runtime`, `group:google`, `group:agents`,
-`group:github`, `group:whatsapp`, `group:channels`, and `group:all`.
-Wildcards like `gmail_*` are also supported.
+`group:github`, `group:automation`, `group:whatsapp`, `group:channels`, and
+`group:all`. Wildcards like `gmail_*` are also supported.
+
+## Scheduling
+
+Butterclaw has a small local scheduler inspired by OpenClaw's automation model,
+but implemented as a lightweight JSON store. Jobs live in your config folder,
+can run in a named session, and can target a saved agent profile.
+
+```cmd
+butterclaw schedule add --name release-nudge --at 2026-05-17T09:00:00Z --message "check release blockers" --session release-work
+butterclaw schedule add --name repo-sweep --every 2h --message "inspect project status" --agent debugger
+butterclaw schedule run --due
+butterclaw schedule daemon
+```
+
+Agent tools: `schedule_list`, `schedule_add`, and `schedule_remove`.
+
+## Gateway And Webhooks
+
+Butterclaw's gateway is a small loopback HTTP process for local control and
+automation. It exposes health, model discovery, and authenticated hooks without
+pulling in a heavy daemon stack.
+
+```cmd
+set BUTTERCLAW_GATEWAY_TOKEN=choose-a-local-token
+butterclaw gateway status
+butterclaw gateway serve
+```
+
+Endpoints:
+
+- `GET /health` and `GET /status`
+- `GET /v1/models`
+- `POST /hooks/wake`
+- `POST /hooks/agent`
+
+Hook auth uses `Authorization: Bearer <token>` or `x-butterclaw-token`. Query
+string tokens are rejected. See [docs/GATEWAY.md](docs/GATEWAY.md).
 
 ## GitHub
 
@@ -186,9 +243,9 @@ See [docs/TELEGRAM.md](docs/TELEGRAM.md).
 
 ## WhatsApp
 
-Butterclaw's WhatsApp layer copies the important OpenClaw logic without pulling
-in the full gateway stack: channel policies, default targets, chunked replies,
-webhook verification, and a status surface.
+Butterclaw's WhatsApp layer recreates the important channel behavior without
+pulling in the full gateway stack: channel policies, default targets, chunked
+replies, webhook verification, and a status surface.
 
 Bridge mode lets you connect any local WhatsApp sender command:
 
@@ -328,8 +385,8 @@ butterclaw session clear release-work
 butterclaw session prune release-work 80
 ```
 
-Backups are local JSON files that include agents, teams, skills, sessions, and
-memory. OAuth token state and usage files are excluded.
+Backups are local JSON files that include agents, teams, skills, sessions,
+schedules, and memory. OAuth token state and usage files are excluded.
 
 ```cmd
 butterclaw backup create
@@ -357,17 +414,17 @@ After the tool runs, Butterclaw sends the result back to the model and asks it
 to continue. This keeps the runtime portable across providers that do not
 support native tool calling.
 
-Butterclaw also exposes `workspace_map`, `delegate_task`, and `delegate_team`.
-The map tool gives the model a compact project outline. `delegate_task` starts
-one bounded sub-agent with the same workspace tools, while `delegate_team` runs
-several saved agent profiles on the same task and combines their reports.
-Sub-agents do not get their own delegation tool, so delegation stays simple and
-finite. Butterclaw keeps delegated reports visible in the final answer so agent
-work does not disappear behind a vague summary.
+Butterclaw also exposes `workspace_map`, `delegate_task`, `delegate_team`, and
+`schedule_*` tools. The map tool gives the model a compact project outline.
+`delegate_task` starts one bounded sub-agent with the same workspace tools,
+while `delegate_team` runs several saved agent profiles on the same task and
+combines their reports. Sub-agents do not get their own delegation tool, so
+delegation stays simple and finite. Butterclaw keeps delegated reports visible
+in the final answer so agent work does not disappear behind a vague summary.
 
 Local slash commands such as `/status`, `/tools`, `/tool-policy`, `/new`,
-`/doctor`, `/backup`, `/github`, and `/whatsapp` are handled by the CLI itself
-and are never sent to the model.
+`/doctor`, `/backup`, `/schedule`, `/github`, and `/whatsapp` are handled by the
+CLI itself and are never sent to the model.
 
 ## Development
 
